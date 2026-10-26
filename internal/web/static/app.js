@@ -40,7 +40,10 @@
       toggle.className = 'password-toggle';
       toggle.type = 'button';
       toggle.textContent = 'Show';
-      toggle.setAttribute('aria-label', 'Show ' + input.closest('label').childNodes[0].textContent.trim().toLowerCase());
+      const label = input.closest('label');
+      const text = label && label.firstChild ? label.firstChild.textContent.trim() : '';
+      const name = (text || input.name.replaceAll('_', ' ')).toLowerCase();
+      toggle.setAttribute('aria-label', 'Show ' + name);
       toggle.setAttribute('aria-pressed', 'false');
       input.parentNode.insertBefore(wrapper, input);
       wrapper.append(input, toggle);
@@ -49,7 +52,7 @@
         input.type = reveal ? 'text' : 'password';
         toggle.textContent = reveal ? 'Hide' : 'Show';
         toggle.setAttribute('aria-pressed', String(reveal));
-        toggle.setAttribute('aria-label', (reveal ? 'Hide ' : 'Show ') + input.name.replaceAll('_', ' '));
+        toggle.setAttribute('aria-label', (reveal ? 'Hide ' : 'Show ') + name);
       });
     });
   };
@@ -59,7 +62,8 @@
     const table = document.querySelector(search.dataset.search);
     if (!table) return;
     const rows = [...table.querySelectorAll('[data-search-row]')];
-    const empty = table.closest('.card').querySelector('.search-empty');
+    const card = table.closest('.card');
+    const empty = card ? card.querySelector('.search-empty') : null;
     search.addEventListener('input', () => {
       const query = search.value.trim().toLocaleLowerCase();
       let visible = 0;
