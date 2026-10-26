@@ -238,6 +238,7 @@ func (s *Store) DeleteOtherSessions(ctx context.Context, user uuid.UUID, token s
 const (
 	PurposeVerify = "verify"
 	PurposeReset  = "reset"
+	PurposeChange = "change"
 )
 
 // CreateEmailToken makes the token of a link to the account's address and
@@ -329,5 +330,60 @@ func (s *Store) ChangeEmail(ctx context.Context, id uuid.UUID, email string) err
 // address, if there is one.
 func (s *Store) SetEmailProblem(ctx context.Context, email, problem string) error {
 	_, err := s.pool.Exec(ctx, "update users set email_problem = $2 where email = $1", email, problem)
+	return err
+}
+
+// CreateEmailChange makes the token of a link, sent to the new address, that
+// moves a confirmed account to it. Earlier unused links for a move stop
+// working.
+func (s *Store) CreateEmailChange(ctx context.Context, u User, email string, ttl time.Duration) (string, error) {
+	token, err := random()
+	if err != nil {
+		return "", err
+	}
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, "delete from email_tokens where user_id = $1 and purpose = $2 and used_at is null", u.ID, PurposeChange); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, "insert into email_tokens (id, user_id, purpose, email, expires_at) values ($1, $2, $3, $4, $5)",
+			hashToken(token), u.ID, PurposeChange, email, time.Now().Add(ttl))
+		return err
+	})
+	return token, err
+}
+
+// MoveEmail uses a move token up and gives its account the address the link
+// went to. It returns the account and its old address.
+func (s *Store) MoveEmail(ctx context.Context, token string) (User, string, error) {
+	var id uuid.UUID
+	var old string
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		var email string
+		err := tx.QueryRow(ctx, `update email_tokens t set used_at = now() from users u
+			where t.id = $1 and t.purpose = $2 and t.used_at is null and t.expires_at > now() and u.id = t.user_id
+			returning t.user_id, t.email, u.email`, hashToken(token), PurposeChange).Scan(&id, &email, &old)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, "update users set email = $2, email_problem = '' where id = $1", id, email)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return ErrEmailTaken
+		}
+		return err
+	})
+	if err != nil {
+		return User{}, "", err
+	}
+	u, err := s.UserByID(ctx, id)
+	return u, old, err
+}
+
+// DeleteUser forgets an account with its sessions and links.
+func (s *Store) DeleteUser(ctx context.Context, id uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, "delete from users where id = $1", id)
 	return err
 }

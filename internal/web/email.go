@@ -27,17 +27,17 @@ const (
 	resetTTL  = time.Hour
 )
 
-// email sends a short message built around one link.
+// email sends a short message built around one link, if any.
 func (s *Server) email(ctx context.Context, to, subject, lead, link, tail string) error {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	esc := template.HTMLEscapeString
-	return s.Mail.Send(ctx, mail.Message{
-		To:      to,
-		Subject: subject,
-		Text:    lead + "\n\n" + link + "\n\n" + tail + "\n",
-		HTML:    "<p>" + esc(lead) + "</p>\n<p><a href=\"" + esc(link) + "\">" + esc(link) + "</a></p>\n<p>" + esc(tail) + "</p>\n",
-	})
+	text, html := lead+"\n\n", "<p>"+esc(lead)+"</p>\n"
+	if link != "" {
+		text += link + "\n\n"
+		html += "<p><a href=\"" + esc(link) + "\">" + esc(link) + "</a></p>\n"
+	}
+	return s.Mail.Send(ctx, mail.Message{To: to, Subject: subject, Text: text + tail + "\n", HTML: html + "<p>" + esc(tail) + "</p>\n"})
 }
 
 // sendVerification emails the account a link that confirms its address.

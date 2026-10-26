@@ -11,7 +11,7 @@
   </div>
 </div>
 <nav class="settings-nav" aria-label="Settings sections">
-  <a href="#plan">Your plan</a><a href="#connections">API connections</a><a href="#security">Security</a>
+  <a href="#plan">Your plan</a><a href="#connections">API connections</a><a href="#security">Security</a><a href="#email">Email</a><a href="#account">Delete account</a>
 </nav>
 <section class="card plan-card" id="plan">
   <span class="icon-tile">{{template "icon-leaf"}}</span>
@@ -134,6 +134,56 @@
       </label>
     </div>
     <button>Change password {{template "icon-arrow"}}</button>
+  </form>
+</section>
+<section class="card" id="email">
+  <div class="card-heading">
+    <div>
+      <h2>
+        Your email
+      </h2>
+      <p class="muted">
+        {{.User.Email}} is confirmed. A new address takes over once you open the link we send to it.
+      </p>
+    </div>
+    <span class="icon-tile">{{template "icon-mail"}}</span>
+  </div>
+  <form method="post" action="/settings/email" class="password-form">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <div class="form-two-col">
+      <label>
+        New email<input type="email" name="email" required autocomplete="email" placeholder="you@example.com">
+      </label>
+      <label>
+        Current password<input type="password" name="current" required autocomplete="current-password" placeholder="Your current password">
+      </label>
+    </div>
+    <button>Send a confirmation link {{template "icon-arrow"}}</button>
+  </form>
+</section>
+<section class="card" id="account">
+  <div class="card-heading">
+    <div>
+      <h2>
+        Delete your account
+      </h2>
+      <p class="muted">
+        Your agents stop for good, your keys are erased, your Telegram chats disconnect and you can no longer log in. Your trading history stays only without your name. This cannot be undone.
+      </p>
+    </div>
+    <span class="icon-tile amber">{{template "icon-info"}}</span>
+  </div>
+  <form method="post" action="/settings/delete" class="password-form">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <div class="form-two-col">
+      <label>
+        Current password<input type="password" name="current" required autocomplete="current-password" placeholder="Your current password">
+      </label>
+      <label>
+        Type DELETE to confirm<input type="text" name="confirm" required pattern="DELETE" autocomplete="off" placeholder="DELETE">
+      </label>
+    </div>
+    <button class="danger">Delete my account</button>
   </form>
 </section>
 {{end}}

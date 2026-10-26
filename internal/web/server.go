@@ -95,6 +95,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /forgot", s.forgot)
 	mux.HandleFunc("GET /reset", s.resetForm)
 	mux.HandleFunc("POST /reset", s.reset)
+	mux.HandleFunc("GET /change-email", s.confirmEmailChange)
 	mux.HandleFunc("POST /webhooks/mailjet", s.mailjetWebhook)
 	mux.Handle("GET /verify-email", s.requireAccess(s.verifyNotice, anyAccount))
 	mux.Handle("POST /verify-email", s.requireAccess(s.resendVerification, anyAccount))
@@ -126,6 +127,8 @@ func (s *Server) Handler() http.Handler {
 		"POST /settings/keys":                    s.addKeys,
 		"POST /settings/keys/{id}/revoke":        s.revokeKey,
 		"POST /settings/password":                s.changePassword,
+		"POST /settings/email":                   s.changeEmail,
+		"POST /settings/delete":                  s.deleteAccount,
 	} {
 		mux.Handle(pattern, s.requireUser(h))
 	}

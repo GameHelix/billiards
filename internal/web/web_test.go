@@ -107,6 +107,19 @@ func (f *fakeEngine) server(t *testing.T) *httptest.Server {
 		w.WriteHeader(status)
 		json.NewEncoder(w).Encode(v)
 	}
+	mux.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) { reply(w, 200, map[string]bool{"ok": true}) })
+	mux.HandleFunc("DELETE /v1/tenants/{t}", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		t, ok := f.tenants[r.PathValue("t")]
+		if !ok {
+			reply(w, 404, map[string]any{"error": map[string]string{"code": "not_found", "message": "no such tenant"}})
+			return
+		}
+		t.Status, t.Name = "closed", ""
+		f.tenants[t.ID] = t
+		reply(w, 200, api.Closed{Stopped: []api.Stopped{}})
+	})
 	mux.HandleFunc("POST /v1/tenants", func(w http.ResponseWriter, r *http.Request) {
 		var in api.NewTenant
 		json.NewDecoder(r.Body).Decode(&in)
@@ -280,6 +293,7 @@ func (f *fakeNotifier) server(t *testing.T) *httptest.Server {
 		w.WriteHeader(201)
 		json.NewEncoder(w).Encode(map[string]any{"url": "https://t.me/TestBot?start=code" + strconv.Itoa(f.links), "expires_at": time.Now().Add(10 * time.Minute)})
 	})
+	mux.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) { json.NewEncoder(w).Encode(map[string]bool{"ok": true}) })
 	mux.HandleFunc("GET /v1/tenants/{t}/chats", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
@@ -1053,5 +1067,96 @@ func TestKeyFormsSayHowToGetEachKey(t *testing.T) {
 	r.srv.Store.SetTier(context.Background(), u.ID, "standard")
 	if _, body = r.get("/settings"); !strings.Contains(body, "real-money key") || !strings.Contains(body, "<code>203.0.113.7</code>, this platform's address") {
 		t.Fatal("settings lack the real-money steps with the server's address")
+	}
+}
+
+func TestChangingTheEmailNeedsTheNewAddressConfirmed(t *testing.T) {
+	r := newRig(t)
+	r.srv.Admins = []string{"boss@example.com"}
+	ctx := context.Background()
+	if _, err := r.srv.Store.CreateUser(ctx, "taken@example.com", "x", "trial"); err != nil {
+		t.Fatal(err)
+	}
+	csrf := r.signup("pat@example.com")
+	change := func(email, current string) (*http.Response, string) {
+		return r.post("/settings/email", url.Values{"csrf": {csrf}, "email": {email}, "current": {current}})
+	}
+	for _, tc := range []struct{ email, current, want string }{
+		{"pat@new.example", "wrong password!", "current password is wrong"},
+		{"pat@example.com", "correct horse battery", "already your email"},
+		{"boss@example.com", "correct horse battery", "cannot be used"},
+		{"taken@example.com", "correct horse battery", "An account with this email exists"},
+	} {
+		if resp, body := change(tc.email, tc.current); resp.StatusCode != 422 || !strings.Contains(body, tc.want) {
+			t.Fatalf("%s: %d, want %q", tc.email, resp.StatusCode, tc.want)
+		}
+	}
+	if resp, _ := change("Pat@New.example", "correct horse battery"); resp.StatusCode != 303 {
+		t.Fatalf("change: %d", resp.StatusCode)
+	}
+	link := r.mail.link(t, "pat@new.example")
+	if u, err := r.srv.Store.UserByEmail(ctx, "pat@example.com"); err != nil || !u.Verified() {
+		t.Fatalf("the address changed before the link: %v", err)
+	}
+	if resp, _ := r.get(link); resp.StatusCode != 303 || resp.Header.Get("Location") != "/settings" {
+		t.Fatalf("link: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	if u, err := r.srv.Store.UserByEmail(ctx, "pat@new.example"); err != nil || !u.Verified() {
+		t.Fatalf("new address: %+v %v", u, err)
+	}
+	if sent := r.mail.to("pat@example.com"); sent[len(sent)-1].Subject != "Your Candylario email was changed" || !strings.Contains(sent[len(sent)-1].Text, "boss@example.com") {
+		t.Fatalf("no notice to the old address: %+v", sent[len(sent)-1])
+	}
+	if resp, _ := r.get(link); resp.StatusCode != 410 {
+		t.Fatalf("link used twice: %d", resp.StatusCode)
+	}
+	jar, _ := cookiejar.New(nil)
+	r.client.Jar = jar
+	if resp, _ := r.post("/login", url.Values{"email": {"pat@example.com"}, "password": {"correct horse battery"}}); resp.StatusCode != 401 {
+		t.Fatalf("old address logs in: %d", resp.StatusCode)
+	}
+	if resp, _ := r.post("/login", url.Values{"email": {"pat@new.example"}, "password": {"correct horse battery"}}); resp.StatusCode != 303 {
+		t.Fatalf("new address: %d", resp.StatusCode)
+	}
+}
+
+func TestDeletingTheAccountClosesItEverywhere(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	csrf := r.signup("oli@example.com")
+	tenant := r.tenantOf("oli@example.com")
+	r.notif.mu.Lock()
+	r.notif.chats = []notifier.Chat{{ChatID: 7, Name: "@oli", LinkedAt: time.Now()}}
+	r.notif.mu.Unlock()
+	if resp, body := r.post("/settings/delete", url.Values{"csrf": {csrf}, "current": {"wrong password!"}, "confirm": {"DELETE"}}); resp.StatusCode != 422 || !strings.Contains(body, "current password is wrong") {
+		t.Fatalf("wrong password: %d", resp.StatusCode)
+	}
+	if resp, body := r.post("/settings/delete", url.Values{"csrf": {csrf}, "current": {"correct horse battery"}, "confirm": {"delete"}}); resp.StatusCode != 422 || !strings.Contains(body, "Type DELETE") {
+		t.Fatalf("without the confirmation: %d", resp.StatusCode)
+	}
+	resp, _ := r.post("/settings/delete", url.Values{"csrf": {csrf}, "current": {"correct horse battery"}, "confirm": {"DELETE"}})
+	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/" {
+		t.Fatalf("delete: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	r.engine.mu.Lock()
+	status := r.engine.tenants[tenant].Status
+	r.engine.mu.Unlock()
+	r.notif.mu.Lock()
+	left := len(r.notif.chats)
+	r.notif.mu.Unlock()
+	if status != "closed" || left != 0 {
+		t.Fatalf("engine tenant %s, %d chats left", status, left)
+	}
+	if _, err := r.srv.Store.UserByEmail(ctx, "oli@example.com"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("the account is still there: %v", err)
+	}
+	if resp, _ := r.get("/agents"); resp.StatusCode != 303 || resp.Header.Get("Location") != "/login" {
+		t.Fatalf("still logged in: %d", resp.StatusCode)
+	}
+	if resp, _ := r.post("/login", url.Values{"email": {"oli@example.com"}, "password": {"correct horse battery"}}); resp.StatusCode != 401 {
+		t.Fatalf("log-in after deleting: %d", resp.StatusCode)
+	}
+	if resp, _ := r.post("/signup", url.Values{"email": {"oli@example.com"}, "password": {"correct horse battery"}}); resp.StatusCode != 303 {
+		t.Fatalf("the address is not free again: %d", resp.StatusCode)
 	}
 }

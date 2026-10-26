@@ -3,7 +3,7 @@ module github.com/candylario/app
 go 1.27
 
 require (
-	github.com/candylario/trader v0.0.0-20261026044538-1f697a800e84
+	github.com/candylario/trader v0.0.0-20261026185011-e7a15879f9e7
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
 	golang.org/x/crypto v0.58.0
