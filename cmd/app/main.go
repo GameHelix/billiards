@@ -17,6 +17,7 @@ import (
 
 	"github.com/candylario/trader/api"
 
+	"github.com/candylario/app/internal/mail"
 	"github.com/candylario/app/internal/notifier"
 	"github.com/candylario/app/internal/store"
 	"github.com/candylario/app/internal/tiers"
@@ -30,7 +31,10 @@ const usage = `app — Candylario accounts, tiers and dashboards
   app users                              list accounts
 
 Needs DATABASE_URL, ENGINE_API_URL and ENGINE_API_TOKEN. Telegram needs
-NOTIFIER_API_URL and NOTIFIER_API_TOKEN. APP_BASE_URL is the public address.`
+NOTIFIER_API_URL and NOTIFIER_API_TOKEN. APP_BASE_URL is the public address.
+Email needs MAILJET_API_KEY and MAILJET_SECRET_KEY, and sends from
+no-reply@APP_DOMAIN (or MAIL_FROM); without them emails go to the log.
+MAILJET_WEBHOOK_SECRET opens /webhooks/mailjet for Mailjet's event reports.`
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -85,6 +89,19 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		} else {
 			logf("NOTIFIER_API_TOKEN is not set; Telegram is off")
 		}
+		if key, secret := os.Getenv("MAILJET_API_KEY"), os.Getenv("MAILJET_SECRET_KEY"); key != "" && secret != "" {
+			from := os.Getenv("MAIL_FROM")
+			if from == "" && os.Getenv("APP_DOMAIN") != "" {
+				from = "no-reply@" + os.Getenv("APP_DOMAIN")
+			}
+			if from == "" {
+				return errors.New("set APP_DOMAIN or MAIL_FROM to send email")
+			}
+			srv.Mail = &mail.Mailjet{APIKey: key, SecretKey: secret, From: from, FromName: "Candylario", HTTP: &http.Client{Timeout: 20 * time.Second}}
+		} else {
+			logf("MAILJET_API_KEY or MAILJET_SECRET_KEY is not set; emails go to the log")
+		}
+		srv.MailjetWebhookSecret = os.Getenv("MAILJET_WEBHOOK_SECRET")
 		addr := os.Getenv("APP_ADDR")
 		if addr == "" {
 			addr = ":8080"
@@ -123,7 +140,11 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 			return err
 		}
 		for _, u := range users {
-			fmt.Fprintf(out, "%s\t%s\ttenant %s\t%s\n", u.Email, u.Tier, u.TenantID, u.CreatedAt.UTC().Format("2006-01-02"))
+			confirmed := "unconfirmed"
+			if u.Verified() {
+				confirmed = "confirmed"
+			}
+			fmt.Fprintf(out, "%s\t%s\t%s\ttenant %s\t%s\n", u.Email, confirmed, u.Tier, u.TenantID, u.CreatedAt.UTC().Format("2006-01-02"))
 		}
 		return nil
 	}

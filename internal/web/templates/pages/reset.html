@@ -1,0 +1,10 @@
+{{define "content"}}
+<h1>Set a new password</h1>
+<form method="post" action="/reset" class="card narrow">
+  <input type="hidden" name="token" value="{{.Data.Token}}">
+  <p class="muted">For {{.Data.Email}}.</p>
+  <label>New password <input type="password" name="password" minlength="10" maxlength="72" required autocomplete="new-password"></label>
+  <label>New password again <input type="password" name="again" minlength="10" maxlength="72" required autocomplete="new-password"></label>
+  <button>Set password</button>
+</form>
+{{end}}

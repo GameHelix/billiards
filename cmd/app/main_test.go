@@ -110,7 +110,7 @@ func TestTierSetGivesTheEngineTheNewPlan(t *testing.T) {
 		t.Fatal("unknown tier accepted")
 	}
 	out.Reset()
-	if err := run(ctx, []string{"users"}, &out); err != nil || !strings.Contains(out.String(), "jo@example.com\tstandard") {
+	if err := run(ctx, []string{"users"}, &out); err != nil || !strings.Contains(out.String(), "jo@example.com\tunconfirmed\tstandard") {
 		t.Fatalf("users: %v %s", err, out.String())
 	}
 }

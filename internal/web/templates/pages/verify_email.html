@@ -1,0 +1,19 @@
+{{define "content"}}
+<h1>Confirm your email</h1>
+<section class="card narrow">
+  <p>We sent a link to <strong>{{.Data.Email}}</strong>. Open it to start; it works for 48 hours.</p>
+  {{with .Data.Problem}}<p class="problem">Mail to this address failed: {{.}}. Check it below.</p>{{end}}
+  <form method="post" action="/verify-email">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <button>Send a new link</button>
+  </form>
+</section>
+<section class="card narrow">
+  <h2>Wrong address?</h2>
+  <form method="post" action="/verify-email/address">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>Email <input type="email" name="email" value="{{.Data.Email}}" required autocomplete="email"></label>
+    <button>Change it and send a link</button>
+  </form>
+</section>
+{{end}}

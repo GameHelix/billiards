@@ -1,0 +1,15 @@
+{{define "content"}}
+<h1>Forgot your password?</h1>
+{{if .Data.Sent}}
+<section class="card narrow">
+  <p>If an account exists for <strong>{{.Data.Email}}</strong>, we sent it a link to set a new password. The link works for an hour.</p>
+  <p class="muted"><a href="/login">Back to log in</a></p>
+</section>
+{{else}}
+<form method="post" action="/forgot" class="card narrow">
+  <label>Email <input type="email" name="email" value="{{.Data.Email}}" required autocomplete="email"></label>
+  <button>Send a reset link</button>
+  <p class="muted"><a href="/login">Back to log in</a></p>
+</form>
+{{end}}
+{{end}}

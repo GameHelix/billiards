@@ -89,21 +89,35 @@ func Migrate(ctx context.Context, url string) error {
 
 // User is an account. TenantID is its engine tenant, created by the app
 // with that id; TenantReady says the engine has confirmed it.
+// EmailVerifiedAt is when the address was confirmed, and EmailProblem the
+// last delivery failure reported for it.
 type User struct {
-	ID           uuid.UUID
-	Email        string
-	PasswordHash string
-	TenantID     uuid.UUID
-	TenantReady  bool
-	Tier         string
-	CreatedAt    time.Time
+	ID              uuid.UUID
+	Email           string
+	PasswordHash    string
+	TenantID        uuid.UUID
+	TenantReady     bool
+	Tier            string
+	CreatedAt       time.Time
+	EmailVerifiedAt *time.Time
+	EmailProblem    string
 }
 
-const userCols = "id, email, password_hash, tenant_id, tenant_ready, tier, created_at"
+// Verified says whether the account's email address is confirmed.
+func (u User) Verified() bool { return u.EmailVerifiedAt != nil }
+
+const userCols = "id, email, password_hash, tenant_id, tenant_ready, tier, created_at, email_verified_at, email_problem"
+
+// userColsU is userCols for a query that calls the users table u.
+var userColsU = "u." + strings.ReplaceAll(userCols, ", ", ", u.")
+
+func userFields(u *User) []any {
+	return []any{&u.ID, &u.Email, &u.PasswordHash, &u.TenantID, &u.TenantReady, &u.Tier, &u.CreatedAt, &u.EmailVerifiedAt, &u.EmailProblem}
+}
 
 func scanUser(r pgx.Row) (User, error) {
 	var u User
-	err := r.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.TenantID, &u.TenantReady, &u.Tier, &u.CreatedAt)
+	err := r.Scan(userFields(&u)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}
@@ -199,9 +213,9 @@ func (s *Store) CreateSession(ctx context.Context, user uuid.UUID, ttl time.Dura
 func (s *Store) Session(ctx context.Context, token string) (Session, User, error) {
 	var sess Session
 	var u User
-	err := s.pool.QueryRow(ctx, `select s.user_id, s.csrf, s.expires_at, u.id, u.email, u.password_hash, u.tenant_id, u.tenant_ready, u.tier, u.created_at
+	err := s.pool.QueryRow(ctx, `select s.user_id, s.csrf, s.expires_at, `+userColsU+`
 		from sessions s join users u on u.id = s.user_id where s.id = $1 and s.expires_at > now()`, hashToken(token)).
-		Scan(&sess.UserID, &sess.CSRF, &sess.ExpiresAt, &u.ID, &u.Email, &u.PasswordHash, &u.TenantID, &u.TenantReady, &u.Tier, &u.CreatedAt)
+		Scan(append([]any{&sess.UserID, &sess.CSRF, &sess.ExpiresAt}, userFields(&u)...)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return sess, u, ErrNotFound
 	}
@@ -217,5 +231,103 @@ func (s *Store) DeleteSession(ctx context.Context, token string) error {
 // token, for example after a password change.
 func (s *Store) DeleteOtherSessions(ctx context.Context, user uuid.UUID, token string) error {
 	_, err := s.pool.Exec(ctx, "delete from sessions where user_id = $1 and id <> $2", user, hashToken(token))
+	return err
+}
+
+// What an emailed link is for.
+const (
+	PurposeVerify = "verify"
+	PurposeReset  = "reset"
+)
+
+// CreateEmailToken makes the token of a link to the account's address and
+// returns it. Earlier unused links for the same purpose stop working.
+func (s *Store) CreateEmailToken(ctx context.Context, u User, purpose string, ttl time.Duration) (string, error) {
+	token, err := random()
+	if err != nil {
+		return "", err
+	}
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, "delete from email_tokens where user_id = $1 and purpose = $2 and used_at is null", u.ID, purpose); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, "insert into email_tokens (id, user_id, purpose, email, expires_at) values ($1, $2, $3, $4, $5)",
+			hashToken(token), u.ID, purpose, u.Email, time.Now().Add(ttl))
+		return err
+	})
+	return token, err
+}
+
+// liveToken matches a token that is unused, unexpired and was sent to the
+// address its account still has.
+const liveToken = "t.id = $1 and t.purpose = $2 and t.used_at is null and t.expires_at > now() and u.id = t.user_id and t.email = u.email"
+
+// EmailTokenUser finds the account of a live token without using it up.
+func (s *Store) EmailTokenUser(ctx context.Context, token, purpose string) (User, error) {
+	return scanUser(s.pool.QueryRow(ctx, "select "+userColsU+" from email_tokens t, users u where "+liveToken, hashToken(token), purpose))
+}
+
+func useToken(ctx context.Context, tx pgx.Tx, token, purpose string) (uuid.UUID, error) {
+	var id uuid.UUID
+	err := tx.QueryRow(ctx, "update email_tokens t set used_at = now() from users u where "+liveToken+" returning t.user_id", hashToken(token), purpose).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return id, ErrNotFound
+	}
+	return id, err
+}
+
+// VerifyEmail uses a confirmation token up and confirms its account's address.
+func (s *Store) VerifyEmail(ctx context.Context, token string) (User, error) {
+	var id uuid.UUID
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		var err error
+		if id, err = useToken(ctx, tx, token, PurposeVerify); err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, "update users set email_verified_at = coalesce(email_verified_at, now()), email_problem = '' where id = $1", id)
+		return err
+	})
+	if err != nil {
+		return User{}, err
+	}
+	return s.UserByID(ctx, id)
+}
+
+// ResetPassword uses a reset token up, sets the new password, confirms the
+// address the link went to and logs the account out everywhere.
+func (s *Store) ResetPassword(ctx context.Context, token, passwordHash string) (User, error) {
+	var id uuid.UUID
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		var err error
+		if id, err = useToken(ctx, tx, token, PurposeReset); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, "update users set password_hash = $2, email_verified_at = coalesce(email_verified_at, now()), email_problem = '' where id = $1", id, passwordHash); err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, "delete from sessions where user_id = $1", id)
+		return err
+	})
+	if err != nil {
+		return User{}, err
+	}
+	return s.UserByID(ctx, id)
+}
+
+// ChangeEmail gives an account whose address is not confirmed yet another
+// one, for a typo made at sign-up.
+func (s *Store) ChangeEmail(ctx context.Context, id uuid.UUID, email string) error {
+	_, err := s.pool.Exec(ctx, "update users set email = $2, email_problem = '' where id = $1 and email_verified_at is null", id, email)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return ErrEmailTaken
+	}
+	return err
+}
+
+// SetEmailProblem records a delivery failure for the account with the
+// address, if there is one.
+func (s *Store) SetEmailProblem(ctx context.Context, email, problem string) error {
+	_, err := s.pool.Exec(ctx, "update users set email_problem = $2 where email = $1", email, problem)
 	return err
 }

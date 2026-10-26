@@ -721,6 +721,9 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 	if err := s.Store.DeleteOtherSessions(r.Context(), v.User.ID, v.Token); err != nil {
 		s.Logf("database: %v", err)
 	}
+	if err := s.sendPasswordNotice(r.Context(), v.User); err != nil {
+		s.Logf("password notice: %v", err)
+	}
 	s.flash(w, "Password changed; other browsers were logged out.")
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/candylario/trader/api"
 
 	"github.com/candylario/app/internal/engine"
+	"github.com/candylario/app/internal/mail"
 	"github.com/candylario/app/internal/notifier"
 	"github.com/candylario/app/internal/store"
 	"github.com/candylario/app/internal/tiers"
@@ -37,11 +38,17 @@ type Server struct {
 	Events   *engine.Events
 	Notifier *notifier.Client // nil when Telegram is not set up
 	BaseURL  string
+	Mail     mail.Sender // nil writes emails to the log
 	Logf     func(format string, args ...any)
+
+	// MailjetWebhookSecret is the password Mailjet's event reports carry;
+	// empty turns the webhook off.
+	MailjetWebhookSecret string
 
 	once   sync.Once
 	tmpl   map[string]*template.Template
 	logins *limiter
+	mails  *limiter
 }
 
 const (
@@ -53,8 +60,12 @@ const (
 func (s *Server) init() {
 	s.tmpl = parseTemplates()
 	s.logins = newLimiter(10, 15*time.Minute)
+	s.mails = newLimiter(5, time.Hour)
 	if s.Logf == nil {
 		s.Logf = func(string, ...any) {}
+	}
+	if s.Mail == nil {
+		s.Mail = mail.Log{Logf: s.Logf}
 	}
 	if s.Events == nil {
 		s.Events = &engine.Events{Client: s.Engine}
@@ -74,6 +85,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /login", s.loginForm)
 	mux.HandleFunc("POST /login", s.login)
 	mux.HandleFunc("POST /logout", s.logout)
+	mux.HandleFunc("GET /verify", s.verify)
+	mux.HandleFunc("GET /forgot", s.forgotForm)
+	mux.HandleFunc("POST /forgot", s.forgot)
+	mux.HandleFunc("GET /reset", s.resetForm)
+	mux.HandleFunc("POST /reset", s.reset)
+	mux.HandleFunc("POST /webhooks/mailjet", s.mailjetWebhook)
+	mux.Handle("GET /verify-email", s.requireAccount(s.verifyNotice, false))
+	mux.Handle("POST /verify-email", s.requireAccount(s.resendVerification, false))
+	mux.Handle("POST /verify-email/address", s.requireAccount(s.changeAddress, false))
 	for pattern, h := range map[string]http.HandlerFunc{
 		"GET /setup":                             s.setup,
 		"GET /setup/keys":                        s.keysForm,

@@ -51,9 +51,13 @@ func (s *Server) sessionOf(r *http.Request) (viewer, bool) {
 }
 
 // requireUser loads the session, checks the CSRF token of every change,
-// makes sure the engine knows the tenant, and redirects to log-in
-// otherwise.
-func (s *Server) requireUser(h http.HandlerFunc) http.Handler {
+// sends an account whose address is not confirmed to confirm it, makes sure
+// the engine knows the tenant, and redirects to log-in otherwise.
+func (s *Server) requireUser(h http.HandlerFunc) http.Handler { return s.requireAccount(h, true) }
+
+// requireAccount is requireUser; with verified false it also lets in an
+// account whose address is not confirmed yet, and creates no tenant.
+func (s *Server) requireAccount(h http.HandlerFunc, verified bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		v, ok := s.sessionOf(r)
 		if !ok {
@@ -76,7 +80,16 @@ func (s *Server) requireUser(h http.HandlerFunc) http.Handler {
 				return
 			}
 		}
-		if !v.User.TenantReady {
+		if verified && !v.User.Verified() {
+			if r.Header.Get("HX-Request") != "" {
+				w.Header().Set("HX-Redirect", "/verify-email")
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			http.Redirect(w, r, "/verify-email", http.StatusSeeOther)
+			return
+		}
+		if verified && !v.User.TenantReady {
 			if err := s.ensureTenant(r.Context(), &v.User); err != nil {
 				s.fail(w, r, fmt.Errorf("engine tenant: %w", err))
 				return
@@ -202,15 +215,16 @@ func (s *Server) signup(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	if err := s.ensureTenant(r.Context(), &u); err != nil {
-		// The next page tries again.
-		s.Logf("engine tenant for %s: %v", u.ID, err)
-	}
 	if err := s.startSession(w, r, u); err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/setup", http.StatusSeeOther)
+	// The engine tenant comes once the address is confirmed.
+	if err := s.sendVerification(r.Context(), u); err != nil {
+		s.Logf("verification email: %v", err)
+		s.flash(w, "The email could not be sent; send a new link in a minute.")
+	}
+	http.Redirect(w, r, "/verify-email", http.StatusSeeOther)
 }
 
 // dummyHash keeps a log-in with an unknown email as slow as one with a

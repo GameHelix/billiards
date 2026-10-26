@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/candylario/trader/api"
 
+	"github.com/candylario/app/internal/mail"
 	"github.com/candylario/app/internal/notifier"
 	"github.com/candylario/app/internal/store"
 )
@@ -306,10 +308,55 @@ func (f *fakeNotifier) server(t *testing.T) *httptest.Server {
 	}))
 }
 
+// fakeMail keeps the emails the app sends, or fails them all.
+type fakeMail struct {
+	mu   sync.Mutex
+	sent []mail.Message
+	fail bool
+}
+
+func (f *fakeMail) Send(_ context.Context, m mail.Message) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.fail {
+		return errors.New("mail is down")
+	}
+	f.sent = append(f.sent, m)
+	return nil
+}
+
+func (f *fakeMail) to(addr string) []mail.Message {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []mail.Message
+	for _, m := range f.sent {
+		if m.To == addr {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+var linkPattern = regexp.MustCompile(`http://app\.test(/\S+)`)
+
+// link is the path of the link in the last email to the address.
+func (f *fakeMail) link(t *testing.T, addr string) string {
+	t.Helper()
+	sent := f.to(addr)
+	if len(sent) > 0 {
+		if m := linkPattern.FindStringSubmatch(sent[len(sent)-1].Text); m != nil {
+			return m[1]
+		}
+	}
+	t.Fatalf("no link mailed to %s", addr)
+	return ""
+}
+
 type rig struct {
 	t      *testing.T
 	engine *fakeEngine
 	notif  *fakeNotifier
+	mail   *fakeMail
 	srv    *Server
 	app    *httptest.Server
 	client *http.Client
@@ -329,13 +376,14 @@ func newRig(t *testing.T) *rig {
 	nf := &fakeNotifier{}
 	ns := nf.server(t)
 	t.Cleanup(ns.Close)
+	fm := &fakeMail{}
 	srv := &Server{Store: st, Engine: &api.Client{BaseURL: es.URL, Token: eng.token}, Notifier: &notifier.Client{BaseURL: ns.URL, Token: "notifier-token"},
-		BaseURL: "http://app.test", Logf: t.Logf}
+		BaseURL: "http://app.test", Mail: fm, MailjetWebhookSecret: "hook-secret", Logf: t.Logf}
 	app := httptest.NewServer(srv.Handler())
 	t.Cleanup(app.Close)
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	return &rig{t: t, engine: eng, notif: nf, srv: srv, app: app, client: client}
+	return &rig{t: t, engine: eng, notif: nf, mail: fm, srv: srv, app: app, client: client}
 }
 
 func (r *rig) get(path string) (*http.Response, string) {
@@ -367,12 +415,17 @@ func (r *rig) post(path string, form url.Values, headers ...string) (*http.Respo
 
 var csrfPattern = regexp.MustCompile(`name="csrf" value="([^"]+)"`)
 
-// signup registers and logs in, and returns the session's CSRF token.
+// signup registers, confirms the address with the emailed link and logs
+// in, and returns the session's CSRF token.
 func (r *rig) signup(email string) string {
 	r.t.Helper()
 	resp, body := r.post("/signup", url.Values{"email": {email}, "password": {"correct horse battery"}})
-	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/setup" {
+	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/verify-email" {
 		r.t.Fatalf("signup: %d %s %s", resp.StatusCode, resp.Header.Get("Location"), body)
+	}
+	resp, body = r.get(r.mail.link(r.t, normalizeEmail(email)))
+	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/setup" {
+		r.t.Fatalf("confirm: %d %s %s", resp.StatusCode, resp.Header.Get("Location"), body)
 	}
 	_, body = r.get("/settings")
 	m := csrfPattern.FindStringSubmatch(body)
@@ -481,6 +534,9 @@ func TestChangesNeedTheSessionsToken(t *testing.T) {
 	resp, _ = r.get("/agents")
 	if resp.StatusCode != 200 {
 		t.Fatalf("still logged in: %d", resp.StatusCode)
+	}
+	if sent := r.mail.to("cy@example.com"); sent[len(sent)-1].Subject != "Your Candylario password was changed" {
+		t.Fatalf("no notice of the change: %+v", sent)
 	}
 	jar, _ := cookiejar.New(nil)
 	r.client.Jar = jar
@@ -715,5 +771,171 @@ func TestPagesCarryTheFavicon(t *testing.T) {
 	}
 	if _, body := r.get("/"); !strings.Contains(body, `<link rel="icon" href="/favicon.ico"`) {
 		t.Fatal("home page has no favicon link")
+	}
+}
+
+func (r *rig) tenants() int {
+	r.engine.mu.Lock()
+	defer r.engine.mu.Unlock()
+	return len(r.engine.tenants)
+}
+
+func TestSignupNeedsTheEmailConfirmed(t *testing.T) {
+	r := newRig(t)
+	resp, _ := r.post("/signup", url.Values{"email": {"eve@example.com"}, "password": {"correct horse battery"}})
+	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/verify-email" {
+		t.Fatalf("signup: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	resp, _ = r.get("/agents")
+	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/verify-email" {
+		t.Fatalf("agents before confirming: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	if n := r.tenants(); n != 0 {
+		t.Fatalf("%d engine tenants before confirming", n)
+	}
+	resp, body := r.get("/verify-email")
+	m := csrfPattern.FindStringSubmatch(body)
+	if resp.StatusCode != 200 || !strings.Contains(body, "eve@example.com") || m == nil {
+		t.Fatalf("notice: %d %s", resp.StatusCode, body)
+	}
+	first := r.mail.link(t, "eve@example.com")
+	resp, _ = r.post("/verify-email", url.Values{"csrf": {m[1]}})
+	second := r.mail.link(t, "eve@example.com")
+	if resp.StatusCode != 303 || first == second {
+		t.Fatalf("resend: %d, new link %v", resp.StatusCode, first != second)
+	}
+	if resp, _ = r.get(first); resp.StatusCode != 410 {
+		t.Fatalf("replaced link: %d", resp.StatusCode)
+	}
+	if resp, _ = r.get(second); resp.StatusCode != 303 || resp.Header.Get("Location") != "/setup" {
+		t.Fatalf("link: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	if resp, _ = r.get(second); resp.StatusCode != 303 || resp.Header.Get("Location") != "/agents" {
+		t.Fatalf("link again while logged in: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	if resp, _ = r.get("/agents"); resp.StatusCode != 200 || r.tenants() != 1 {
+		t.Fatalf("agents after confirming: %d, %d tenants", resp.StatusCode, r.tenants())
+	}
+}
+
+func TestAMistypedAddressCanBeChangedBeforeConfirming(t *testing.T) {
+	r := newRig(t)
+	if _, err := r.srv.Store.CreateUser(context.Background(), "gus@example.com", "x", "trial"); err != nil {
+		t.Fatal(err)
+	}
+	r.post("/signup", url.Values{"email": {"fran@exmaple.com"}, "password": {"correct horse battery"}})
+	typo := r.mail.link(t, "fran@exmaple.com")
+	_, body := r.get("/verify-email")
+	csrf := csrfPattern.FindStringSubmatch(body)[1]
+	resp, body := r.post("/verify-email/address", url.Values{"csrf": {csrf}, "email": {"gus@example.com"}})
+	if resp.StatusCode != 422 || !strings.Contains(body, "An account with this email exists") {
+		t.Fatalf("taken address: %d", resp.StatusCode)
+	}
+	resp, _ = r.post("/verify-email/address", url.Values{"csrf": {csrf}, "email": {"Fran@Example.com"}})
+	if resp.StatusCode != 303 {
+		t.Fatalf("change: %d", resp.StatusCode)
+	}
+	if resp, _ = r.get(typo); resp.StatusCode != 410 {
+		t.Fatalf("link to the old address: %d", resp.StatusCode)
+	}
+	if resp, _ = r.get(r.mail.link(t, "fran@example.com")); resp.StatusCode != 303 || resp.Header.Get("Location") != "/setup" {
+		t.Fatalf("link to the new address: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+}
+
+func TestForgottenPasswordIsResetByEmail(t *testing.T) {
+	r := newRig(t)
+	r.signup("hal@example.com")
+	first := r.client.Jar
+	jar, _ := cookiejar.New(nil)
+	r.client.Jar = jar
+	resp, body := r.post("/forgot", url.Values{"email": {"nobody@example.com"}})
+	if resp.StatusCode != 200 || !strings.Contains(body, "If an account exists") || len(r.mail.to("nobody@example.com")) != 0 {
+		t.Fatalf("unknown address: %d", resp.StatusCode)
+	}
+	resp, body = r.post("/forgot", url.Values{"email": {"HAL@example.com"}})
+	if resp.StatusCode != 200 || !strings.Contains(body, "If an account exists") {
+		t.Fatalf("forgot: %d", resp.StatusCode)
+	}
+	link := r.mail.link(t, "hal@example.com")
+	token := strings.TrimPrefix(link, "/reset?token=")
+	if resp, body = r.get(link); resp.StatusCode != 200 || !strings.Contains(body, "For hal@example.com") {
+		t.Fatalf("reset form: %d", resp.StatusCode)
+	}
+	if resp, body = r.post("/reset", url.Values{"token": {token}, "password": {"a brand new password"}, "again": {"another password"}}); resp.StatusCode != 422 || !strings.Contains(body, "differ") {
+		t.Fatalf("passwords differ: %d", resp.StatusCode)
+	}
+	if resp, _ = r.post("/reset", url.Values{"token": {token}, "password": {"short"}, "again": {"short"}}); resp.StatusCode != 422 {
+		t.Fatalf("short password: %d", resp.StatusCode)
+	}
+	resp, _ = r.post("/reset", url.Values{"token": {token}, "password": {"a brand new password"}, "again": {"a brand new password"}})
+	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/agents" {
+		t.Fatalf("reset: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	if resp, _ = r.get("/agents"); resp.StatusCode != 200 {
+		t.Fatalf("logged in after the reset: %d", resp.StatusCode)
+	}
+	if resp, _ = r.get(link); resp.StatusCode != 410 {
+		t.Fatalf("link used twice: %d", resp.StatusCode)
+	}
+	r.client.Jar = first
+	if resp, _ = r.get("/agents"); resp.StatusCode != 303 || resp.Header.Get("Location") != "/login" {
+		t.Fatalf("other browser still logged in: %d", resp.StatusCode)
+	}
+	if resp, _ = r.post("/login", url.Values{"email": {"hal@example.com"}, "password": {"correct horse battery"}}); resp.StatusCode != 401 {
+		t.Fatalf("old password: %d", resp.StatusCode)
+	}
+	if resp, _ = r.post("/login", url.Values{"email": {"hal@example.com"}, "password": {"a brand new password"}}); resp.StatusCode != 303 {
+		t.Fatalf("new password: %d", resp.StatusCode)
+	}
+	if resp, _ = r.post("/reset", url.Values{"token": {token}, "password": {"x"}, "again": {"y"}}, "Sec-Fetch-Site", "cross-site"); resp.StatusCode != 403 {
+		t.Fatalf("cross-site reset: %d", resp.StatusCode)
+	}
+}
+
+func TestMailjetReportsMarkAddressesThatFail(t *testing.T) {
+	r := newRig(t)
+	r.post("/signup", url.Values{"email": {"ivy@example.com"}, "password": {"correct horse battery"}})
+	hook := func(user, pass, body string) int {
+		req, _ := http.NewRequest(http.MethodPost, r.app.URL+"/webhooks/mailjet", strings.NewReader(body))
+		req.SetBasicAuth(user, pass)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	bounce := `{"event":"bounce","time":1,"MessageID":13792286917004336,"email":"Ivy@example.com","hard_bounce":true,"error_related_to":"recipient","error":"user unknown"}`
+	if code := hook("mailjet", "wrong", bounce); code != 401 {
+		t.Fatalf("wrong secret: %d", code)
+	}
+	if code := hook("mailjet", "hook-secret", bounce); code != 200 {
+		t.Fatalf("bounce: %d", code)
+	}
+	if _, body := r.get("/verify-email"); !strings.Contains(body, "Mail to this address failed: bounced: user unknown") {
+		t.Fatalf("notice without the bounce: %s", body)
+	}
+	if code := hook("mailjet", "hook-secret", `[{"event":"open","email":"ivy@example.com"},{"event":"blocked","email":"ivy@example.com","error":"preblocked"}]`); code != 200 {
+		t.Fatalf("grouped: %d", code)
+	}
+	if code := hook("mailjet", "hook-secret", `{"event":"bounce","email":"ivy@example.com","hard_bounce":false,"error":"quota exceeded"}`); code != 200 {
+		t.Fatalf("soft bounce: %d", code)
+	}
+	if _, body := r.get("/verify-email"); !strings.Contains(body, "blocked: preblocked") {
+		t.Fatalf("notice: %s", body)
+	}
+	r.srv.MailjetWebhookSecret = ""
+	if code := hook("mailjet", "", bounce); code != 404 {
+		t.Fatalf("webhook off: %d", code)
+	}
+}
+
+func TestSignupSaysWhenTheEmailCouldNotBeSent(t *testing.T) {
+	r := newRig(t)
+	r.mail.fail = true
+	r.post("/signup", url.Values{"email": {"jo@example.com"}, "password": {"correct horse battery"}})
+	if _, body := r.get("/verify-email"); !strings.Contains(body, "could not be sent") {
+		t.Fatalf("notice: %s", body)
 	}
 }
