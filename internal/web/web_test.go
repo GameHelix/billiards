@@ -704,3 +704,16 @@ func TestLogoutEndsTheSession(t *testing.T) {
 		t.Fatalf("htmx after logout: %d", resp.StatusCode)
 	}
 }
+
+func TestPagesCarryTheFavicon(t *testing.T) {
+	r := newRig(t)
+	for _, p := range []string{"/favicon.ico", "/static/apple-touch-icon.png"} {
+		resp, _ := r.get(p)
+		if resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "image/") {
+			t.Fatalf("%s: %d %s", p, resp.StatusCode, resp.Header.Get("Content-Type"))
+		}
+	}
+	if _, body := r.get("/"); !strings.Contains(body, `<link rel="icon" href="/favicon.ico"`) {
+		t.Fatal("home page has no favicon link")
+	}
+}
