@@ -1,0 +1,22 @@
+{{define "content"}}
+<h1>New agent</h1>
+{{if .Data.Setup}}<p class="steps">1 Keys · <strong>2 Agent</strong> · 3 Telegram</p>{{end}}
+<form method="post" action="{{.Data.Action}}" class="card">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <label>Name <input name="name" value="{{.Data.Name}}" pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{0,39}" required placeholder="btc-eth"></label>
+  <fieldset><legend>Coins</legend>
+    {{range .Data.Coins}}<label class="inline"><input type="checkbox" name="symbols" value="{{.Symbol}}"{{if .Checked}} checked{{end}}> {{.Coin}}</label>{{end}}
+  </fieldset>
+  <label>Capital in USDT <input type="number" name="capital" value="{{.Data.Capital}}" min="50" max="1000000" step="1" required></label>
+  <label>A decision every
+    <select name="interval">{{range .Data.Intervals}}<option value="{{.}}"{{if eq . $.Data.Interval}} selected{{end}}>{{interval .}}</option>{{end}}</select>
+  </label>
+  {{if gt (len .Data.Binance) 1}}
+  <label>Binance key
+    <select name="binance_key">{{range .Data.Binance}}<option value="{{.ID}}"{{if eq .ID $.Data.Binance1}} selected{{end}}>{{.Mode}} {{.Hint}}</option>{{end}}</select>
+  </label>
+  {{else}}{{range .Data.Binance}}<input type="hidden" name="binance_key" value="{{.ID}}"><p class="muted">Trades on Binance {{.Mode}} with the key {{.Hint}}.</p>{{end}}{{end}}
+  <p class="muted">The agent decides on this schedule and on sharp moves or major news, up to {{.Data.Tier.Plan.MaxEventDecisionsPerDay}} extra times a day. A 10% loss in a day pauses it until midnight UTC; a 30% loss sells everything and stops.</p>
+  <button>Create and start</button>
+</form>
+{{end}}

@@ -1,0 +1,21 @@
+{{define "content"}}
+<h1>Agents</h1>
+{{if not .Data.Agents}}
+<p>No agents yet. <a class="button" href="/setup">Set up your first agent</a></p>
+{{else}}
+<table>
+  <thead><tr><th>Agent</th><th>Mode</th><th>State</th><th>Equity</th></tr></thead>
+  <tbody>
+  {{range .Data.Agents}}
+  <tr>
+    <td><a href="/agents/{{.ID}}">{{.Name}}</a></td>
+    <td>{{if eq .Mode "testnet"}}<span class="badge test">testnet</span>{{else}}<span class="badge live">live</span>{{end}}</td>
+    <td>{{if .Problem}}{{.Problem}}{{else if .Running}}running, trading {{.Trading}}{{else if eq .Status "active"}}starting{{else}}stopped{{end}}</td>
+    <td>{{if .Equity}}{{money .Equity}} USDT{{end}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{if .Data.CanAdd}}<p><a class="button quiet" href="/agents/new">New agent</a></p>{{else}}<p class="muted">Your {{.Data.Tier.Title}} tier runs {{.Data.Tier.Plan.MaxAgents}} agent(s).</p>{{end}}
+{{end}}
+{{end}}

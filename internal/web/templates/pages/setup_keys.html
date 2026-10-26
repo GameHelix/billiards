@@ -1,0 +1,6 @@
+{{define "content"}}
+<h1>Your keys</h1>
+{{if .Data.Setup}}<p class="steps"><strong>1 Keys</strong> · 2 Agent · 3 Telegram</p>{{end}}
+<p>Keys go straight to the engine's vault, which tries them first. This app never keeps them.</p>
+{{template "keys_form" .Data}}
+{{end}}

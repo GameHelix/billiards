@@ -1,0 +1,7 @@
+{{define "sellall"}}
+<div class="card warn">
+  <p>Sell everything {{.Name}} holds and stop trading?</p>
+  <button class="danger" hx-post="/agents/{{.ID}}/commands" hx-vals='{"command": "sell_all", "confirm": "yes"}' hx-target="#status">Yes, sell everything</button>
+  <button class="quiet" hx-get="/agents/{{.ID}}/sellall?cancel=1" hx-target="#confirm">Cancel</button>
+</div>
+{{end}}

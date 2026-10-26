@@ -1,0 +1,43 @@
+{{define "status"}}
+{{if .ClearConfirm}}<div id="confirm" hx-swap-oob="true"></div>{{end}}
+{{if .Message}}<p class="flash">{{.Message}}</p>{{end}}
+{{if .Problem}}<p class="muted">{{.Problem}}</p>{{end}}
+{{with .Status}}
+<div class="grid">
+  <div class="stat"><span class="label">Equity</span><strong>{{money .Equity}}</strong><span class="muted">of {{money .Capital}} USDT</span></div>
+  <div class="stat"><span class="label">Buy and hold</span><strong>{{money .BuyAndHold}}</strong><span class="muted">same capital, held</span></div>
+  <div class="stat"><span class="label">Cash</span><strong>{{money .Cash}}</strong><span class="muted">fees paid {{money .Fees}}</span></div>
+  <div class="stat"><span class="label">Trading</span><strong>{{if .Running}}{{.Trading}}{{else}}not running{{end}}</strong><span class="muted">{{if .StopReason}}{{.StopReason}}{{else if .NextDecision}}next decision {{when .NextDecision}}{{end}}</span></div>
+</div>
+{{if .Positions}}
+<table class="compact">
+  <thead><tr><th>Coin</th><th>Quantity</th><th>Value</th><th>Weight</th></tr></thead>
+  <tbody>{{range .Positions}}<tr><td>{{.Coin}}</td><td>{{.Qty}}</td><td>{{money .Value}}</td><td>{{pct .Weight}}</td></tr>{{end}}</tbody>
+</table>
+{{else}}<p class="muted">No positions; everything is in cash.</p>{{end}}
+{{with .LastDecision}}
+<h3>Last decision <span class="muted">· {{when .At}} · {{.Kind}} · ${{usd .CostUSD}}</span></h3>
+<table class="compact">
+  <tbody>{{range $sym, $r := .Ratings}}<tr><td>{{coin $sym}}</td><td><strong>{{rating $r.Rating}}</strong> <span class="muted">{{$r.Confidence}}</span></td><td class="wrap">{{$r.Rationale}}</td></tr>{{end}}</tbody>
+</table>
+<p class="wrap">{{.Summary}}</p>
+{{end}}
+<p class="muted">{{.Trades}} trades · {{.RightCalls}} of {{.GradedCalls}} graded calls right{{with .AISpend}} · model spend today ${{usd .TodayUSD}} of ${{usd .DailyLimitUSD}}, this month ${{usd .MonthUSD}} of ${{usd .MonthlyLimitUSD}}{{end}}</p>
+{{end}}
+<div class="controls">
+  {{if eq .Agent.Status "stopped"}}
+  <button hx-post="/agents/{{.Agent.ID}}/start" hx-target="#status">Start agent</button>
+  {{else}}
+  <button class="quiet" hx-post="/agents/{{.Agent.ID}}/stop" hx-target="#status" hx-confirm="Stop the agent? It keeps its holdings and stops watching.">Stop agent</button>
+  {{end}}
+  {{if and .Status .Agent.Running}}
+  <button hx-post="/agents/{{.Agent.ID}}/commands" hx-vals='{"command": "decide"}' hx-target="#status">Decide now</button>
+  {{if eq .Status.Trading "on"}}
+  <button class="quiet" hx-post="/agents/{{.Agent.ID}}/commands" hx-vals='{"command": "stop_trading"}' hx-target="#status">Stop trading</button>
+  {{else}}
+  <button class="quiet" hx-post="/agents/{{.Agent.ID}}/commands" hx-vals='{"command": "resume_trading"}' hx-target="#status">Resume trading</button>
+  {{end}}
+  <button class="danger" hx-get="/agents/{{.Agent.ID}}/sellall" hx-target="#confirm">Sell everything</button>
+  {{end}}
+</div>
+{{end}}

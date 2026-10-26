@@ -1,0 +1,7 @@
+{{define "content"}}
+<h1>{{.Data.Agent.Name}} {{if eq .Data.Agent.Mode "testnet"}}<span class="badge test">testnet</span>{{else}}<span class="badge live">live</span>{{end}}</h1>
+<section id="status" hx-get="/agents/{{.Data.Agent.ID}}/status" hx-trigger="every 20s" hx-swap="innerHTML">{{template "status" .Data.Status}}</section>
+<div id="confirm"></div>
+<section id="chart" hx-get="/agents/{{.Data.Agent.ID}}/chart" hx-trigger="every 300s" hx-swap="innerHTML">{{template "chart" .Data.Chart}}</section>
+<section id="events" hx-get="/agents/{{.Data.Agent.ID}}/events" hx-trigger="every 20s" hx-swap="innerHTML">{{template "events" .Data.Events}}</section>
+{{end}}

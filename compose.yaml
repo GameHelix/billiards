@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: app
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  app:
+    build: .
+    image: app:local
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgres://app:${POSTGRES_PASSWORD}@postgres:5432/app?sslmode=disable
+      ENGINE_API_URL: ${ENGINE_API_URL:-http://trader:8080}
+      NOTIFIER_API_URL: ${NOTIFIER_API_URL:-http://notifier:8080}
+      APP_BASE_URL: ${APP_BASE_URL:-http://127.0.0.1:3000}
+    ports:
+      - "127.0.0.1:3000:8080"
+    networks: [default, candylario]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    stop_grace_period: 15s
+
+networks:
+  candylario:
+    external: true
+
+volumes:
+  pgdata:

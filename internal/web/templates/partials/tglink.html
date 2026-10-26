@@ -1,0 +1,8 @@
+{{define "tglink"}}
+{{if .Problem}}<p class="problem">{{.Problem}}</p>
+<button hx-post="/telegram/links" hx-target="#link" hx-swap="innerHTML">Try again</button>
+{{else}}
+<p><a class="button" href="{{.Link.URL}}" target="_blank" rel="noopener">Open in Telegram</a></p>
+<p class="muted">The link works once, until {{when .Link.ExpiresAt}}. Press Start in Telegram, then <a href="/telegram">refresh this page</a>.</p>
+{{end}}
+{{end}}

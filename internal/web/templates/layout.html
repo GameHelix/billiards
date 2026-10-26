@@ -1,0 +1,31 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · Candylario</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/htmx.min.js" defer></script>
+</head>
+<body{{if .CSRF}} hx-headers='{"X-CSRF-Token": "{{.CSRF}}"}'{{end}}>
+<header>
+  <a class="brand" href="/">Candylario</a>
+  <nav>
+  {{if .User}}
+    <a href="/agents">Agents</a>
+    <a href="/telegram">Telegram</a>
+    <a href="/settings">Settings</a>
+    <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link">Log out</button></form>
+  {{else}}
+    <a href="/login">Log in</a>
+    <a class="button" href="/signup">Sign up</a>
+  {{end}}
+  </nav>
+</header>
+<main>
+{{if .Flash}}<p class="flash">{{.Flash}}</p>{{end}}
+{{if .Error}}<p class="problem">{{.Error}}</p>{{end}}
+{{template "content" .}}
+</main>
+</body>
+</html>{{end}}

@@ -1,0 +1,21 @@
+{{define "keys_form"}}
+<form method="post" action="{{.Action}}" class="card" autocomplete="off">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <fieldset><legend>Anthropic API key{{if .HasAnthropic}} <span class="muted">(stored; enter one to add another)</span>{{end}}</legend>
+    <label>Key <input type="password" name="anthropic_key" {{if not .HasAnthropic}}required{{end}} placeholder="sk-ant-…"></label>
+    <p class="muted">The agent's decisions run on your key and are billed to your account.</p>
+  </fieldset>
+  <fieldset><legend>Binance API key{{if .Binance}} <span class="muted">(stored; enter one to add another)</span>{{end}}</legend>
+    <label>Key <input type="password" name="binance_key" {{if not .Binance}}required{{end}}></label>
+    <label>Secret <input type="password" name="binance_secret" {{if not .Binance}}required{{end}}></label>
+    <label>Trades on
+      <select name="binance_mode">
+        <option value="testnet">Binance testnet, test funds (testnet.binance.vision)</option>
+        {{if .LiveAllowed}}<option value="live">Binance, real money</option>{{end}}
+      </select>
+    </label>
+    <p class="muted">Allow spot trading only, no withdrawals; a key that can withdraw is refused. Restrict it to the server's IP if you can.</p>
+  </fieldset>
+  <button>{{if .Setup}}Store keys and continue{{else}}Store{{end}}</button>
+</form>
+{{end}}

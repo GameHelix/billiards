@@ -1,0 +1,9 @@
+{{define "content"}}
+<h1>Sign up</h1>
+<form method="post" action="/signup" class="card narrow">
+  <label>Email <input type="email" name="email" value="{{with .Data}}{{.Email}}{{end}}" required autocomplete="email"></label>
+  <label>Password <input type="password" name="password" minlength="10" maxlength="72" required autocomplete="new-password"></label>
+  <button>Create account</button>
+  <p class="muted">New accounts trade with Binance test funds on BTC and ETH. Have an account? <a href="/login">Log in</a>.</p>
+</form>
+{{end}}

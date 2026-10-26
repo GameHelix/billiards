@@ -1,0 +1,16 @@
+{{define "events"}}
+<h3>Recent events</h3>
+{{if not .}}<p class="muted">Nothing recorded yet.</p>{{else}}
+<table class="compact events">
+  <tbody>
+  {{range .}}
+  <tr>
+    <td class="muted nowrap">{{when .At}}</td>
+    <td class="nowrap">{{.Type}}</td>
+    <td class="wrap">{{.Summary}} <details><summary>raw</summary><pre>{{pretty .Raw}}</pre></details></td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+{{end}}
