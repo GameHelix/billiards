@@ -1,4 +1,4 @@
-# github.com/candylario/trader v0.0.0-20261025203041-710797964a0c
+# github.com/candylario/trader v0.0.0-20261026044538-1f697a800e84
 ## explicit; go 1.27
 github.com/candylario/trader/api
 # github.com/google/uuid v1.6.0
