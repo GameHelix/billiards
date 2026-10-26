@@ -53,4 +53,5 @@ td.wrap { white-space: pre-wrap; word-break: break-word; }
 .chart .equity.up { stroke: var(--ok); }
 .chart .equity.down { stroke: var(--bad); }
 p.wrap { white-space: pre-wrap; }
+.qr { display: block; image-rendering: pixelated; margin: 8px 0; }
 @media (max-width: 600px) { header { flex-direction: column; gap: 8px; } }

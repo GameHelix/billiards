@@ -3,6 +3,8 @@
 <button hx-post="/telegram/links" hx-target="#link" hx-swap="innerHTML">Try again</button>
 {{else}}
 <p><a class="button" href="{{.Link.URL}}" target="_blank" rel="noopener">Open in Telegram</a></p>
+{{with .QR}}<img class="qr" src="{{.}}" alt="QR code of the link">{{end}}
+<p class="muted">No Telegram app on this computer? Scan the code with your phone{{with .WebURL}}, <a href="{{.}}" target="_blank" rel="noopener">open Telegram Web</a>{{end}}{{if .Code}}, or send <code>/start {{.Code}}</code> to @{{.Bot}}{{end}}.</p>
 <p class="muted">The link works once, until {{when .Link.ExpiresAt}}. Press Start in Telegram, then <a href="/telegram">refresh this page</a>.</p>
 {{end}}
 {{end}}

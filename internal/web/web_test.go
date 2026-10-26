@@ -690,7 +690,8 @@ func TestTelegramLinksAndChats(t *testing.T) {
 	r := newRig(t)
 	csrf := r.signup("gus@example.com")
 	resp, body := r.post("/telegram/links", nil, "X-CSRF-Token", csrf)
-	if resp.StatusCode != 200 || !strings.Contains(body, "https://t.me/TestBot?start=code1") {
+	if resp.StatusCode != 200 || !strings.Contains(body, "https://t.me/TestBot?start=code1") || !strings.Contains(body, `src="data:image/png;base64,`) ||
+		!strings.Contains(body, "https://web.telegram.org/k/#?tgaddr=tg%3A%2F%2Fresolve%3Fdomain%3DTestBot%26start%3Dcode1") || !strings.Contains(body, "<code>/start code1</code> to @TestBot") {
 		t.Fatalf("link: %d %s", resp.StatusCode, body)
 	}
 	r.notif.mu.Lock()

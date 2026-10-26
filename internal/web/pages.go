@@ -2,10 +2,13 @@ package web
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"net/http"
+	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
@@ -13,6 +16,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	"rsc.io/qr"
 
 	"github.com/candylario/trader/api"
 
@@ -611,6 +615,27 @@ func (s *Server) telegram(w http.ResponseWriter, r *http.Request) {
 type linkView struct {
 	Link    notifier.Link
 	Problem string
+	Bot     string       // the bot's username
+	Code    string       // what the bot's /start takes
+	WebURL  string       // the link in Telegram Web
+	QR      template.URL // the link as a QR code, for a phone
+}
+
+// newLinkView adds ways to use a link on a computer without Telegram: a QR
+// code for the phone, Telegram Web, and the message to send by hand.
+func newLinkView(l notifier.Link) linkView {
+	v := linkView{Link: l}
+	if u, err := url.Parse(l.URL); err == nil {
+		v.Bot, v.Code = strings.Trim(u.Path, "/"), u.Query().Get("start")
+	}
+	if v.Bot != "" && v.Code != "" {
+		v.WebURL = "https://web.telegram.org/k/#?tgaddr=" + url.QueryEscape("tg://resolve?domain="+v.Bot+"&start="+v.Code)
+	}
+	if c, err := qr.Encode(l.URL, qr.M); err == nil {
+		c.Scale = 4
+		v.QR = template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(c.PNG()))
+	}
+	return v
 }
 
 func (s *Server) telegramLink(w http.ResponseWriter, r *http.Request) {
@@ -626,7 +651,7 @@ func (s *Server) telegramLink(w http.ResponseWriter, r *http.Request) {
 		s.partial(w, "tglink", http.StatusOK, linkView{Problem: "Telegram is not reachable right now; try again in a minute."})
 		return
 	}
-	s.partial(w, "tglink", http.StatusOK, linkView{Link: link})
+	s.partial(w, "tglink", http.StatusOK, newLinkView(link))
 }
 
 func (s *Server) telegramDisconnect(w http.ResponseWriter, r *http.Request) {

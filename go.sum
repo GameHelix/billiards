@@ -1,5 +1,3 @@
-github.com/candylario/trader v0.0.0-20261025203041-710797964a0c h1:33xjvYaYhtc2hZZmGw8Glfz6fNbupvIMGyjMr8lAWJo=
-github.com/candylario/trader v0.0.0-20261025203041-710797964a0c/go.mod h1:OJZntyYvjq85ztG0DxGYxSe+PAwMuAEQwYRdsX/7sp8=
 github.com/candylario/trader v0.0.0-20261026044538-1f697a800e84 h1:CobcOA3a/QuKU/KuEv3If32/k0v0acvAvqCkdf0pjTw=
 github.com/candylario/trader v0.0.0-20261026044538-1f697a800e84/go.mod h1:OJZntyYvjq85ztG0DxGYxSe+PAwMuAEQwYRdsX/7sp8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -32,3 +30,5 @@ gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8
 gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+rsc.io/qr v0.2.0 h1:6vBLea5/NRMVTz8V66gipeLycZMl/+UlFmk8DvqQ6WY=
+rsc.io/qr v0.2.0/go.mod h1:IF+uZjkb9fqyeF/4tlBoynqmQxUoPfWEKh921coOuXs=
