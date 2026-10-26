@@ -15,6 +15,6 @@ docker compose up -d --build                      # needs the shared network: do
 open http://127.0.0.1:3000
 ```
 
-On a server prepared by [candylario/infra](https://github.com/candylario/infra): `./deploy.sh deploy@SERVER_IP`. For HTTPS, point a domain's A record at the server and set `APP_DOMAIN`, `APP_BASE_URL=https://DOMAIN` and `COMPOSE_PROFILES=public` in `.env`; Caddy gets the certificate and redirects `www.`.
+On a server prepared by [candylario/infra](https://github.com/candylario/infra): `./deploy.sh deploy@SERVER_IP`. For HTTPS, point a domain's A record at the server and set `APP_DOMAIN`, `APP_BASE_URL=https://DOMAIN` and `COMPOSE_PROFILES=public` in its settings; Caddy gets the certificate and redirects `www.`.
 
 The engine's `api` package is vendored (`go mod vendor`) so the image builds without access to the private module. Tests need Postgres: `TEST_DATABASE_URL=postgres://... go test ./...`
