@@ -62,7 +62,7 @@ type verifyPage struct {
 func (s *Server) verifyNotice(w http.ResponseWriter, r *http.Request) {
 	v := current(r)
 	if v.User.Verified() {
-		http.Redirect(w, r, "/agents", http.StatusSeeOther)
+		http.Redirect(w, r, s.landing(v.User), http.StatusSeeOther)
 		return
 	}
 	s.render(w, r, "verify_email.html", http.StatusOK, page{Title: "Confirm your email", Data: verifyPage{Email: v.User.Email, Problem: v.User.EmailProblem}})
@@ -72,7 +72,7 @@ func (s *Server) resendVerification(w http.ResponseWriter, r *http.Request) {
 	v := current(r)
 	switch {
 	case v.User.Verified():
-		http.Redirect(w, r, "/agents", http.StatusSeeOther)
+		http.Redirect(w, r, s.landing(v.User), http.StatusSeeOther)
 		return
 	case !s.mails.allow("verify:" + v.User.ID.String()):
 		s.flash(w, "Too many links sent; try again in an hour.")
@@ -88,7 +88,7 @@ func (s *Server) resendVerification(w http.ResponseWriter, r *http.Request) {
 func (s *Server) changeAddress(w http.ResponseWriter, r *http.Request) {
 	v := current(r)
 	if v.User.Verified() {
-		http.Redirect(w, r, "/agents", http.StatusSeeOther)
+		http.Redirect(w, r, s.landing(v.User), http.StatusSeeOther)
 		return
 	}
 	email := normalizeEmail(r.PostFormValue("email"))
@@ -125,11 +125,14 @@ func (s *Server) verify(w http.ResponseWriter, r *http.Request) {
 	v, loggedIn := s.sessionOf(r)
 	switch {
 	case errors.Is(err, store.ErrNotFound) && loggedIn && v.User.Verified():
-		http.Redirect(w, r, "/agents", http.StatusSeeOther)
+		http.Redirect(w, r, s.landing(v.User), http.StatusSeeOther)
 	case errors.Is(err, store.ErrNotFound):
 		s.linkExpired(w, r, "Log in to get a new one.")
 	case err != nil:
 		s.fail(w, r, err)
+	case loggedIn && v.User.ID == u.ID && s.isAdmin(u):
+		s.flash(w, "Email confirmed.")
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
 	case loggedIn && v.User.ID == u.ID:
 		s.flash(w, "Email confirmed.")
 		http.Redirect(w, r, "/setup", http.StatusSeeOther)
@@ -258,7 +261,7 @@ func (s *Server) reset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.flash(w, "Password changed; other browsers were logged out.")
-	http.Redirect(w, r, "/agents", http.StatusSeeOther)
+	http.Redirect(w, r, s.landing(u), http.StatusSeeOther)
 }
 
 // sendPasswordNotice tells the account its password changed, in case it was

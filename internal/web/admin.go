@@ -18,25 +18,18 @@ import (
 // The platform admin's page: every account with its address, tier and
 // agents, and tier changes by hand until payments exist. Admins are the
 // confirmed accounts whose address is in ADMIN_EMAILS; nothing in the app
-// can make anyone else one.
+// can make anyone else one. An admin runs the platform and does not trade on
+// it: no tenant, keys, agents or Telegram.
 
 func (s *Server) isAdmin(u store.User) bool {
-	return u.Verified() && slices.Contains(s.Admins, u.Email)
+	return u.Verified() && s.adminAddress(u.Email)
 }
 
-// requireAdmin answers everyone else as if the page did not exist.
-func (s *Server) requireAdmin(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if !s.isAdmin(current(r).User) {
-			s.notFound(w, r)
-			return
-		}
-		h(w, r)
-	}
-}
+func (s *Server) adminAddress(email string) bool { return slices.Contains(s.Admins, email) }
 
 type adminRow struct {
 	User    store.User
+	Admin   bool
 	Agents  int
 	Running int
 	Problem string
@@ -48,6 +41,10 @@ type adminPage struct {
 }
 
 func (s *Server) admin(w http.ResponseWriter, r *http.Request) {
+	s.adminPage(w, r, http.StatusOK, "")
+}
+
+func (s *Server) adminPage(w http.ResponseWriter, r *http.Request, status int, problem string) {
 	users, err := s.Store.Users(r.Context())
 	if err != nil {
 		s.fail(w, r, err)
@@ -57,8 +54,8 @@ func (s *Server) admin(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	rows := make([]adminRow, len(users))
 	for i, u := range users {
-		rows[i].User = u
-		if !u.TenantReady {
+		rows[i].User, rows[i].Admin = u, s.adminAddress(u.Email)
+		if rows[i].Admin || !u.TenantReady {
 			continue
 		}
 		agents, err := s.Engine.Agents(ctx, u.TenantID.String())
@@ -73,7 +70,7 @@ func (s *Server) admin(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.render(w, r, "admin.html", http.StatusOK, page{Title: "Admin", Data: adminPage{Rows: rows, Tiers: tiers.All}})
+	s.render(w, r, "admin.html", status, page{Title: "Admin", Error: problem, Data: adminPage{Rows: rows, Tiers: tiers.All}})
 }
 
 func (s *Server) adminSetTier(w http.ResponseWriter, r *http.Request) {
@@ -96,6 +93,11 @@ func (s *Server) adminSetTier(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	if s.adminAddress(u.Email) {
+		s.flash(w, "Admins have no tier; they do not trade.")
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+		return
+	}
 	ctx, cancel := callCtx(r)
 	defer cancel()
 	stopped, err := ChangeTier(ctx, s.Store, s.Engine, u, t)
@@ -109,6 +111,18 @@ func (s *Server) adminSetTier(w http.ResponseWriter, r *http.Request) {
 		s.flash(w, fmt.Sprintf("%s is on %s.", u.Email, t.Title))
 	}
 	http.Redirect(w, r, "/admin", http.StatusSeeOther)
+}
+
+func (s *Server) adminChangePassword(w http.ResponseWriter, r *http.Request) {
+	switch problem, err := s.setPassword(r); {
+	case err != nil:
+		s.fail(w, r, err)
+	case problem != "":
+		s.adminPage(w, r, http.StatusUnprocessableEntity, problem)
+	default:
+		s.flash(w, "Password changed; other browsers were logged out.")
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+	}
 }
 
 // ChangeTier moves an account to a tier and gives its engine tenant the new

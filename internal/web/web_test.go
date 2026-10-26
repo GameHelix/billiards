@@ -424,10 +424,13 @@ func (r *rig) signup(email string) string {
 		r.t.Fatalf("signup: %d %s %s", resp.StatusCode, resp.Header.Get("Location"), body)
 	}
 	resp, body = r.get(r.mail.link(r.t, normalizeEmail(email)))
-	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/setup" {
-		r.t.Fatalf("confirm: %d %s %s", resp.StatusCode, resp.Header.Get("Location"), body)
+	next, page := resp.Header.Get("Location"), "/settings"
+	if next == "/admin" {
+		page = "/admin"
+	} else if resp.StatusCode != 303 || next != "/setup" {
+		r.t.Fatalf("confirm: %d %s %s", resp.StatusCode, next, body)
 	}
-	_, body = r.get("/settings")
+	_, body = r.get(page)
 	m := csrfPattern.FindStringSubmatch(body)
 	if m == nil {
 		r.t.Fatalf("no csrf token in settings page: %s", body)
@@ -949,25 +952,67 @@ func TestAdminSeesEveryAccountAndSetsTiers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	r.signup("lee@example.com")
+	jar, _ := cookiejar.New(nil)
+	r.client.Jar = jar
 	csrf := r.signup("boss@example.com")
 	resp, body := r.get("/admin")
-	if resp.StatusCode != 200 || !strings.Contains(body, "kim@example.com") || !strings.Contains(body, "unconfirmed") || !strings.Contains(body, `<a href="/admin">Admin</a>`) {
+	if resp.StatusCode != 200 || !strings.Contains(body, "kim@example.com") || !strings.Contains(body, "lee@example.com") || !strings.Contains(body, "unconfirmed") || !strings.Contains(body, `href="/admin"`) {
 		t.Fatalf("admin page: %d %s", resp.StatusCode, body)
 	}
 	resp, _ = r.post("/admin/users/"+kim.ID.String()+"/tier", url.Values{"csrf": {csrf}, "tier": {"pro"}})
 	if u, _ := r.srv.Store.UserByEmail(ctx, "kim@example.com"); resp.StatusCode != 303 || u.Tier != "pro" {
 		t.Fatalf("tier of an account without a tenant: %d %s", resp.StatusCode, u.Tier)
 	}
-	boss, _ := r.srv.Store.UserByEmail(ctx, "boss@example.com")
-	r.post("/admin/users/"+boss.ID.String()+"/tier", url.Values{"csrf": {csrf}, "tier": {"standard"}})
+	lee, _ := r.srv.Store.UserByEmail(ctx, "lee@example.com")
+	r.post("/admin/users/"+lee.ID.String()+"/tier", url.Values{"csrf": {csrf}, "tier": {"standard"}})
 	r.engine.mu.Lock()
-	live := r.engine.tenants[boss.TenantID.String()].Plan.Live
+	live := r.engine.tenants[lee.TenantID.String()].Plan.Live
 	r.engine.mu.Unlock()
-	if u, _ := r.srv.Store.UserByEmail(ctx, "boss@example.com"); u.Tier != "standard" || !live {
+	if u, _ := r.srv.Store.UserByEmail(ctx, "lee@example.com"); u.Tier != "standard" || !live {
 		t.Fatalf("tier with a tenant: %s, engine plan live %v", u.Tier, live)
 	}
-	if resp, _ = r.post("/admin/users/"+boss.ID.String()+"/tier", url.Values{"csrf": {csrf}, "tier": {"gold"}}); resp.StatusCode != 404 {
+	boss, _ := r.srv.Store.UserByEmail(ctx, "boss@example.com")
+	r.post("/admin/users/"+boss.ID.String()+"/tier", url.Values{"csrf": {csrf}, "tier": {"pro"}})
+	if u, _ := r.srv.Store.UserByEmail(ctx, "boss@example.com"); u.Tier != "trial" {
+		t.Fatalf("an admin got a tier: %s", u.Tier)
+	}
+	if resp, _ = r.post("/admin/users/"+lee.ID.String()+"/tier", url.Values{"csrf": {csrf}, "tier": {"gold"}}); resp.StatusCode != 404 {
 		t.Fatalf("unknown tier: %d", resp.StatusCode)
+	}
+}
+
+func TestAdminIsNotAPlatformUser(t *testing.T) {
+	r := newRig(t)
+	r.srv.Admins = []string{"boss@example.com"}
+	csrf := r.signup("boss@example.com")
+	if n := r.tenants(); n != 0 {
+		t.Fatalf("the admin got %d engine tenants", n)
+	}
+	for _, p := range []string{"/", "/agents", "/setup", "/setup/keys", "/telegram", "/settings"} {
+		if resp, _ := r.get(p); resp.StatusCode != 303 || resp.Header.Get("Location") != "/admin" {
+			t.Fatalf("%s for the admin: %d %s", p, resp.StatusCode, resp.Header.Get("Location"))
+		}
+	}
+	if resp, _ := r.post("/telegram/links", url.Values{"csrf": {csrf}}, "HX-Request", "true"); resp.Header.Get("HX-Redirect") != "/admin" {
+		t.Fatalf("htmx request of the admin: %d %s", resp.StatusCode, resp.Header.Get("HX-Redirect"))
+	}
+	jar, _ := cookiejar.New(nil)
+	r.client.Jar = jar
+	if resp, _ := r.post("/login", url.Values{"email": {"boss@example.com"}, "password": {"correct horse battery"}}); resp.StatusCode != 303 || resp.Header.Get("Location") != "/admin" {
+		t.Fatalf("admin log-in: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	_, body := r.get("/admin")
+	csrf = csrfPattern.FindStringSubmatch(body)[1]
+	if resp, body := r.post("/admin/password", url.Values{"csrf": {csrf}, "current": {"wrong password!"}, "password": {"a brand new password"}, "again": {"a brand new password"}}); resp.StatusCode != 422 || !strings.Contains(body, "The current password is wrong") {
+		t.Fatalf("wrong current password: %d", resp.StatusCode)
+	}
+	resp, _ := r.post("/admin/password", url.Values{"csrf": {csrf}, "current": {"correct horse battery"}, "password": {"a brand new password"}, "again": {"a brand new password"}})
+	if sent := r.mail.to("boss@example.com"); resp.StatusCode != 303 || resp.Header.Get("Location") != "/admin" || sent[len(sent)-1].Subject != "Your Candylario password was changed" {
+		t.Fatalf("admin password change: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	if n := r.tenants(); n != 0 {
+		t.Fatalf("the admin got %d engine tenants", n)
 	}
 }
 

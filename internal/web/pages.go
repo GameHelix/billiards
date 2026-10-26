@@ -720,29 +720,38 @@ func (s *Server) revokeKey(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
-	v := current(r)
-	current, next, again := r.PostFormValue("current"), r.PostFormValue("password"), r.PostFormValue("again")
-	problem := ""
-	switch {
-	case bcrypt.CompareHashAndPassword([]byte(v.User.PasswordHash), []byte(current)) != nil:
-		problem = "The current password is wrong."
-	case next != again:
-		problem = "The new passwords differ."
-	default:
-		problem = checkPassword(next)
-	}
-	if problem != "" {
+	switch problem, err := s.setPassword(r); {
+	case err != nil:
+		s.fail(w, r, err)
+	case problem != "":
 		s.settingsPage(w, r, http.StatusUnprocessableEntity, problem)
-		return
+	default:
+		s.flash(w, "Password changed; other browsers were logged out.")
+		http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	}
+}
+
+// setPassword stores the form's new password if the current one is right,
+// logs the account's other browsers out and emails it a notice. problem is
+// what to tell the user when the form is refused.
+func (s *Server) setPassword(r *http.Request) (problem string, err error) {
+	v := current(r)
+	cur, next, again := r.PostFormValue("current"), r.PostFormValue("password"), r.PostFormValue("again")
+	switch {
+	case bcrypt.CompareHashAndPassword([]byte(v.User.PasswordHash), []byte(cur)) != nil:
+		return "The current password is wrong.", nil
+	case next != again:
+		return "The new passwords differ.", nil
+	}
+	if problem := checkPassword(next); problem != "" {
+		return problem, nil
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(next), bcrypt.DefaultCost)
 	if err != nil {
-		s.fail(w, r, err)
-		return
+		return "", err
 	}
 	if err := s.Store.SetPassword(r.Context(), v.User.ID, string(hash)); err != nil {
-		s.fail(w, r, err)
-		return
+		return "", err
 	}
 	if err := s.Store.DeleteOtherSessions(r.Context(), v.User.ID, v.Token); err != nil {
 		s.Logf("database: %v", err)
@@ -750,6 +759,5 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 	if err := s.sendPasswordNotice(r.Context(), v.User); err != nil {
 		s.Logf("password notice: %v", err)
 	}
-	s.flash(w, "Password changed; other browsers were logged out.")
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	return "", nil
 }

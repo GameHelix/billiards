@@ -50,14 +50,26 @@ func (s *Server) sessionOf(r *http.Request) (viewer, bool) {
 	return viewer{User: user, CSRF: sess.CSRF, Token: c.Value}, true
 }
 
-// requireUser loads the session, checks the CSRF token of every change,
-// sends an account whose address is not confirmed to confirm it, makes sure
-// the engine knows the tenant, and redirects to log-in otherwise.
-func (s *Server) requireUser(h http.HandlerFunc) http.Handler { return s.requireAccount(h, true) }
+// Who may open a page.
+type access int
 
-// requireAccount is requireUser; with verified false it also lets in an
-// account whose address is not confirmed yet, and creates no tenant.
-func (s *Server) requireAccount(h http.HandlerFunc, verified bool) http.Handler {
+const (
+	anyAccount    access = iota // also an account whose address is not confirmed
+	platformUser                // a confirmed account that trades; admins go to /admin
+	platformAdmin               // a confirmed admin
+)
+
+// requireUser loads the session, checks the CSRF token of every change,
+// sends an account whose address is not confirmed to confirm it and an admin
+// to the admin page, makes sure the engine knows the tenant, and redirects
+// to log-in otherwise.
+func (s *Server) requireUser(h http.HandlerFunc) http.Handler {
+	return s.requireAccess(h, platformUser)
+}
+
+// requireAccess is requireUser for one kind of account. Only platform users
+// get an engine tenant: admins run the platform and never trade on it.
+func (s *Server) requireAccess(h http.HandlerFunc, who access) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		v, ok := s.sessionOf(r)
 		if !ok {
@@ -80,16 +92,18 @@ func (s *Server) requireAccount(h http.HandlerFunc, verified bool) http.Handler 
 				return
 			}
 		}
-		if verified && !v.User.Verified() {
-			if r.Header.Get("HX-Request") != "" {
-				w.Header().Set("HX-Redirect", "/verify-email")
-				w.WriteHeader(http.StatusForbidden)
-				return
-			}
-			http.Redirect(w, r, "/verify-email", http.StatusSeeOther)
+		switch {
+		case who == anyAccount:
+		case !v.User.Verified():
+			s.sendTo(w, r, "/verify-email")
 			return
-		}
-		if verified && !v.User.TenantReady {
+		case who == platformAdmin && !s.isAdmin(v.User):
+			s.notFound(w, r)
+			return
+		case who == platformUser && s.isAdmin(v.User):
+			s.sendTo(w, r, "/admin")
+			return
+		case who == platformUser && !v.User.TenantReady:
 			if err := s.ensureTenant(r.Context(), &v.User); err != nil {
 				s.fail(w, r, fmt.Errorf("engine tenant: %w", err))
 				return
@@ -97,6 +111,24 @@ func (s *Server) requireAccount(h http.HandlerFunc, verified bool) http.Handler 
 		}
 		h(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, v)))
 	})
+}
+
+// sendTo redirects, the htmx way for an htmx request.
+func (s *Server) sendTo(w http.ResponseWriter, r *http.Request, path string) {
+	if r.Header.Get("HX-Request") != "" {
+		w.Header().Set("HX-Redirect", path)
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+	http.Redirect(w, r, path, http.StatusSeeOther)
+}
+
+// landing is where an account goes once it is logged in.
+func (s *Server) landing(u store.User) string {
+	if s.isAdmin(u) {
+		return "/admin"
+	}
+	return "/agents"
 }
 
 // ensureTenant creates the user's tenant in the engine, on their tier. The
@@ -151,16 +183,16 @@ type authForm struct {
 }
 
 func (s *Server) signupForm(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.sessionOf(r); ok {
-		http.Redirect(w, r, "/agents", http.StatusSeeOther)
+	if v, ok := s.sessionOf(r); ok {
+		http.Redirect(w, r, s.landing(v.User), http.StatusSeeOther)
 		return
 	}
 	s.render(w, r, "signup.html", http.StatusOK, page{Title: "Sign up"})
 }
 
 func (s *Server) loginForm(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.sessionOf(r); ok {
-		http.Redirect(w, r, "/agents", http.StatusSeeOther)
+	if v, ok := s.sessionOf(r); ok {
+		http.Redirect(w, r, s.landing(v.User), http.StatusSeeOther)
 		return
 	}
 	s.render(w, r, "login.html", http.StatusOK, page{Title: "Log in"})
@@ -258,7 +290,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/agents", http.StatusSeeOther)
+	http.Redirect(w, r, s.landing(u), http.StatusSeeOther)
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {

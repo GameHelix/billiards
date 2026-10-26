@@ -96,9 +96,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /reset", s.resetForm)
 	mux.HandleFunc("POST /reset", s.reset)
 	mux.HandleFunc("POST /webhooks/mailjet", s.mailjetWebhook)
-	mux.Handle("GET /verify-email", s.requireAccount(s.verifyNotice, false))
-	mux.Handle("POST /verify-email", s.requireAccount(s.resendVerification, false))
-	mux.Handle("POST /verify-email/address", s.requireAccount(s.changeAddress, false))
+	mux.Handle("GET /verify-email", s.requireAccess(s.verifyNotice, anyAccount))
+	mux.Handle("POST /verify-email", s.requireAccess(s.resendVerification, anyAccount))
+	mux.Handle("POST /verify-email/address", s.requireAccess(s.changeAddress, anyAccount))
+	mux.Handle("GET /admin", s.requireAccess(s.admin, platformAdmin))
+	mux.Handle("POST /admin/users/{id}/tier", s.requireAccess(s.adminSetTier, platformAdmin))
+	mux.Handle("POST /admin/password", s.requireAccess(s.adminChangePassword, platformAdmin))
 	for pattern, h := range map[string]http.HandlerFunc{
 		"GET /setup":                             s.setup,
 		"GET /setup/keys":                        s.keysForm,
@@ -123,8 +126,6 @@ func (s *Server) Handler() http.Handler {
 		"POST /settings/keys":                    s.addKeys,
 		"POST /settings/keys/{id}/revoke":        s.revokeKey,
 		"POST /settings/password":                s.changePassword,
-		"GET /admin":                             s.requireAdmin(s.admin),
-		"POST /admin/users/{id}/tier":            s.requireAdmin(s.adminSetTier),
 	} {
 		mux.Handle(pattern, s.requireUser(h))
 	}
@@ -146,8 +147,8 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.sessionOf(r); ok {
-		http.Redirect(w, r, "/agents", http.StatusSeeOther)
+	if v, ok := s.sessionOf(r); ok {
+		http.Redirect(w, r, s.landing(v.User), http.StatusSeeOther)
 		return
 	}
 	s.render(w, r, "home.html", http.StatusOK, page{Title: "Trading agents that work around the clock"})
