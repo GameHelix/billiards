@@ -269,7 +269,7 @@ func (f *fakeEngine) server(t *testing.T) *httptest.Server {
 		reply(w, 200, out)
 	}))
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer "+f.token {
+		if r.Header.Get("Authorization") != "Bearer "+f.token && r.URL.Path != "/v1/health" {
 			f.refuse(w, 401, "unauthorized", "bad token")
 			return
 		}
@@ -314,7 +314,7 @@ func (f *fakeNotifier) server(t *testing.T) *httptest.Server {
 		json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"code": "not_found", "message": "no such chat"}})
 	})
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer notifier-token" {
+		if r.Header.Get("Authorization") != "Bearer notifier-token" && r.URL.Path != "/v1/health" {
 			w.WriteHeader(401)
 			return
 		}
@@ -1158,5 +1158,17 @@ func TestDeletingTheAccountClosesItEverywhere(t *testing.T) {
 	}
 	if resp, _ := r.post("/signup", url.Values{"email": {"oli@example.com"}, "password": {"correct horse battery"}}); resp.StatusCode != 303 {
 		t.Fatalf("the address is not free again: %d", resp.StatusCode)
+	}
+}
+
+func TestHealthCoversTheEngineAndTheNotifier(t *testing.T) {
+	r := newRig(t)
+	resp, body := r.get("/healthz")
+	if resp.StatusCode != 200 || !strings.Contains(body, `"engine":true`) || !strings.Contains(body, `"notifier":true`) || !strings.Contains(body, `"ok":true`) {
+		t.Fatalf("healthy: %d %s", resp.StatusCode, body)
+	}
+	r.srv.Notifier.BaseURL = "http://127.0.0.1:1"
+	if resp, body = r.get("/healthz"); resp.StatusCode != 503 || !strings.Contains(body, `"notifier":false`) || !strings.Contains(body, `"ok":false`) {
+		t.Fatalf("notifier down: %d %s", resp.StatusCode, body)
 	}
 }

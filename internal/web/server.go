@@ -135,12 +135,39 @@ func (s *Server) Handler() http.Handler {
 	return s.secure(s.logged(mux))
 }
 
+// health says whether the app, the engine and the notifier all answer, for
+// an uptime monitor: 200 when they do, 503 naming the ones that do not.
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
-	if err := s.Store.Ping(r.Context()); err != nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]bool{"ok": false})
-		return
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	parts := map[string]bool{"app": s.Store.Ping(ctx) == nil, "engine": answers(ctx, s.Engine.BaseURL)}
+	if s.Notifier != nil {
+		parts["notifier"] = answers(ctx, s.Notifier.BaseURL)
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	ok := true
+	for _, up := range parts {
+		ok = ok && up
+	}
+	parts["ok"] = ok
+	status := http.StatusOK
+	if !ok {
+		status = http.StatusServiceUnavailable
+	}
+	writeJSON(w, status, parts)
+}
+
+// answers says whether a Candylario service's health check answers 200.
+func answers(ctx context.Context, base string) bool {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(base, "/")+"/v1/health", nil)
+	if err != nil {
+		return false
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -181,7 +208,7 @@ func (w *statusWriter) WriteHeader(code int) {
 
 func (s *Server) logged(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/static/") || r.URL.Path == "/favicon.ico" {
+		if strings.HasPrefix(r.URL.Path, "/static/") || r.URL.Path == "/favicon.ico" || r.URL.Path == "/healthz" {
 			next.ServeHTTP(w, r)
 			return
 		}
