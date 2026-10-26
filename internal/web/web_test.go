@@ -1172,3 +1172,18 @@ func TestHealthCoversTheEngineAndTheNotifier(t *testing.T) {
 		t.Fatalf("notifier down: %d %s", resp.StatusCode, body)
 	}
 }
+
+func TestLegalPagesAreLinkedFromEveryPublicPage(t *testing.T) {
+	r := newRig(t)
+	for path, want := range map[string]string{"/terms": "Ismat Samadov", "/privacy": "Hetzner Online", "/risk": "30% loss", "/refunds": "within 14 days"} {
+		if resp, body := r.get(path); resp.StatusCode != 200 || !strings.Contains(body, want) {
+			t.Fatalf("%s: %d, want %q", path, resp.StatusCode, want)
+		}
+	}
+	_, body := r.get("/signup")
+	for _, want := range []string{`href="/terms"`, `href="/privacy"`, `href="/risk"`, `href="/refunds"`, "By creating an account you agree"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("sign-up page lacks %s", want)
+		}
+	}
+}

@@ -96,6 +96,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /reset", s.resetForm)
 	mux.HandleFunc("POST /reset", s.reset)
 	mux.HandleFunc("GET /change-email", s.confirmEmailChange)
+	for path, p := range map[string][2]string{"/terms": {"terms.html", "Terms of Service"}, "/privacy": {"privacy.html", "Privacy Policy"},
+		"/risk": {"risk.html", "Risk notice"}, "/refunds": {"refunds.html", "Refund policy"}} {
+		mux.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) { s.render(w, r, p[0], http.StatusOK, page{Title: p[1]}) })
+	}
 	mux.HandleFunc("POST /webhooks/mailjet", s.mailjetWebhook)
 	mux.Handle("GET /verify-email", s.requireAccess(s.verifyNotice, anyAccount))
 	mux.Handle("POST /verify-email", s.requireAccess(s.resendVerification, anyAccount))

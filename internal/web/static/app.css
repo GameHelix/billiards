@@ -830,3 +830,14 @@ form.row .small { min-height: 34px; padding: 6px 10px; font-size: 11px; }
   .app-main { width: 100%; padding: 0; }
   .card { box-shadow: none; break-inside: avoid; }
 }
+.legal { max-width: 760px; margin: 0 auto 64px; padding: 40px 48px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.legal h1 { font-size: clamp(30px, 3vw, 40px); letter-spacing: -.03em; margin: 0 0 6px; }
+.legal h2 { font-size: 18px; margin: 30px 0 8px; }
+.legal p, .legal li { line-height: 1.65; }
+.legal ul { padding-left: 20px; }
+.legal li { margin: 6px 0; }
+.footer-links { display: flex; flex-wrap: wrap; gap: 16px; }
+.footer-links a { color: var(--muted); text-decoration: none; }
+.footer-links a:hover { color: var(--accent); }
+.fine-print { font-size: 12px; line-height: 1.5; margin: 12px 0 0; }
+@media (max-width: 760px) { .legal { padding: 26px 20px; } }
