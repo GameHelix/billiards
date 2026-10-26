@@ -44,6 +44,11 @@ type Server struct {
 	// MailjetWebhookSecret is the password Mailjet's event reports carry;
 	// empty turns the webhook off.
 	MailjetWebhookSecret string
+	// Admins are the addresses whose confirmed accounts run the platform.
+	Admins []string
+	// ServerIP is the address exchanges see the engine's calls come from,
+	// for users to allow on their keys.
+	ServerIP string
 
 	once   sync.Once
 	tmpl   map[string]*template.Template
@@ -118,6 +123,8 @@ func (s *Server) Handler() http.Handler {
 		"POST /settings/keys":                    s.addKeys,
 		"POST /settings/keys/{id}/revoke":        s.revokeKey,
 		"POST /settings/password":                s.changePassword,
+		"GET /admin":                             s.requireAdmin(s.admin),
+		"POST /admin/users/{id}/tier":            s.requireAdmin(s.adminSetTier),
 	} {
 		mux.Handle(pattern, s.requireUser(h))
 	}
@@ -188,12 +195,13 @@ type page struct {
 	CSRF  string
 	Flash string
 	Error string
+	Admin bool
 	Data  any
 }
 
 func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, status int, p page) {
 	if v, ok := r.Context().Value(ctxKey{}).(viewer); ok {
-		p.User, p.CSRF = &v.User, v.CSRF
+		p.User, p.CSRF, p.Admin = &v.User, v.CSRF, s.isAdmin(v.User)
 	}
 	if p.Flash == "" {
 		p.Flash = s.takeFlash(w, r)

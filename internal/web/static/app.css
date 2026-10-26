@@ -54,4 +54,10 @@ td.wrap { white-space: pre-wrap; word-break: break-word; }
 .chart .equity.down { stroke: var(--bad); }
 p.wrap { white-space: pre-wrap; }
 .qr { display: block; image-rendering: pixelated; margin: 8px 0; }
+form.row { display: flex; gap: 6px; align-items: center; }
+form.row select { width: auto; margin-top: 0; }
+.howto { margin: 8px 0; }
+.howto summary { cursor: pointer; color: var(--accent); }
+.howto ol { margin: 8px 0 0; padding-left: 20px; }
+.howto li { margin: 4px 0; }
 @media (max-width: 600px) { header { flex-direction: column; gap: 8px; } }

@@ -940,3 +940,73 @@ func TestSignupSaysWhenTheEmailCouldNotBeSent(t *testing.T) {
 		t.Fatalf("notice: %s", body)
 	}
 }
+
+func TestAdminSeesEveryAccountAndSetsTiers(t *testing.T) {
+	r := newRig(t)
+	r.srv.Admins = []string{"boss@example.com"}
+	ctx := context.Background()
+	kim, err := r.srv.Store.CreateUser(ctx, "kim@example.com", "x", "trial")
+	if err != nil {
+		t.Fatal(err)
+	}
+	csrf := r.signup("boss@example.com")
+	resp, body := r.get("/admin")
+	if resp.StatusCode != 200 || !strings.Contains(body, "kim@example.com") || !strings.Contains(body, "unconfirmed") || !strings.Contains(body, `<a href="/admin">Admin</a>`) {
+		t.Fatalf("admin page: %d %s", resp.StatusCode, body)
+	}
+	resp, _ = r.post("/admin/users/"+kim.ID.String()+"/tier", url.Values{"csrf": {csrf}, "tier": {"pro"}})
+	if u, _ := r.srv.Store.UserByEmail(ctx, "kim@example.com"); resp.StatusCode != 303 || u.Tier != "pro" {
+		t.Fatalf("tier of an account without a tenant: %d %s", resp.StatusCode, u.Tier)
+	}
+	boss, _ := r.srv.Store.UserByEmail(ctx, "boss@example.com")
+	r.post("/admin/users/"+boss.ID.String()+"/tier", url.Values{"csrf": {csrf}, "tier": {"standard"}})
+	r.engine.mu.Lock()
+	live := r.engine.tenants[boss.TenantID.String()].Plan.Live
+	r.engine.mu.Unlock()
+	if u, _ := r.srv.Store.UserByEmail(ctx, "boss@example.com"); u.Tier != "standard" || !live {
+		t.Fatalf("tier with a tenant: %s, engine plan live %v", u.Tier, live)
+	}
+	if resp, _ = r.post("/admin/users/"+boss.ID.String()+"/tier", url.Values{"csrf": {csrf}, "tier": {"gold"}}); resp.StatusCode != 404 {
+		t.Fatalf("unknown tier: %d", resp.StatusCode)
+	}
+}
+
+func TestOnlyConfirmedAdminsSeeTheAdminPage(t *testing.T) {
+	r := newRig(t)
+	r.srv.Admins = []string{"boss@example.com"}
+	csrf := r.signup("lee@example.com")
+	resp, body := r.get("/admin")
+	if resp.StatusCode != 404 || strings.Contains(body, `href="/admin"`) {
+		t.Fatalf("admin page for a user: %d", resp.StatusCode)
+	}
+	lee, _ := r.srv.Store.UserByEmail(context.Background(), "lee@example.com")
+	if resp, _ = r.post("/admin/users/"+lee.ID.String()+"/tier", url.Values{"csrf": {csrf}, "tier": {"pro"}}); resp.StatusCode != 404 {
+		t.Fatalf("tier change by a user: %d", resp.StatusCode)
+	}
+	jar, _ := cookiejar.New(nil)
+	r.client.Jar = jar
+	r.post("/signup", url.Values{"email": {"boss@example.com"}, "password": {"correct horse battery"}})
+	if resp, _ = r.get("/admin"); resp.StatusCode != 303 || resp.Header.Get("Location") != "/verify-email" {
+		t.Fatalf("admin address before confirming: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+}
+
+func TestKeyFormsSayHowToGetEachKey(t *testing.T) {
+	r := newRig(t)
+	r.srv.ServerIP = "203.0.113.7"
+	r.signup("max@example.com")
+	_, body := r.get("/setup/keys")
+	for _, want := range []string{"https://platform.claude.com/settings/keys", "https://testnet.binance.vision", "Log In with GitHub"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("setup page lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "real-money key") {
+		t.Fatal("trial accounts see how to get a real-money key")
+	}
+	u, _ := r.srv.Store.UserByEmail(context.Background(), "max@example.com")
+	r.srv.Store.SetTier(context.Background(), u.ID, "standard")
+	if _, body = r.get("/settings"); !strings.Contains(body, "real-money key") || !strings.Contains(body, "<code>203.0.113.7</code>, this platform's address") {
+		t.Fatal("settings lack the real-money steps with the server's address")
+	}
+}

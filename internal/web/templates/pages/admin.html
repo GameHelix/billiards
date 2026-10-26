@@ -1,0 +1,27 @@
+{{define "content"}}
+<h1>Admin</h1>
+<section class="card">
+  <h2>Accounts</h2>
+  <table>
+    <thead><tr><th>Email</th><th>Address</th><th>Tier</th><th>Agents</th><th>Since</th></tr></thead>
+    <tbody>
+    {{range .Data.Rows}}
+    <tr>
+      <td>{{.User.Email}}</td>
+      <td>{{if .User.Verified}}confirmed{{else}}unconfirmed{{end}}{{with .User.EmailProblem}} · {{.}}{{end}}</td>
+      <td>
+        <form method="post" action="/admin/users/{{.User.ID}}/tier" class="row">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          {{$tier := .User.Tier}}
+          <select name="tier">{{range $.Data.Tiers}}<option value="{{.Name}}"{{if eq .Name $tier}} selected{{end}}>{{.Title}}</option>{{end}}</select>
+          <button class="quiet">Set</button>
+        </form>
+      </td>
+      <td>{{if .Problem}}{{.Problem}}{{else if .User.TenantReady}}{{.Running}} running of {{.Agents}}{{else}}none yet{{end}}</td>
+      <td>{{when .User.CreatedAt}}</td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+</section>
+{{end}}

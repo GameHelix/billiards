@@ -17,6 +17,7 @@
     <a href="/agents">Agents</a>
     <a href="/telegram">Telegram</a>
     <a href="/settings">Settings</a>
+    {{if .Admin}}<a href="/admin">Admin</a>{{end}}
     <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link">Log out</button></form>
   {{else}}
     <a href="/login">Log in</a>

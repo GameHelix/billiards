@@ -34,7 +34,9 @@ Needs DATABASE_URL, ENGINE_API_URL and ENGINE_API_TOKEN. Telegram needs
 NOTIFIER_API_URL and NOTIFIER_API_TOKEN. APP_BASE_URL is the public address.
 Email needs MAILJET_API_KEY and MAILJET_SECRET_KEY, and sends from
 no-reply@APP_DOMAIN (or MAIL_FROM); without them emails go to the log.
-MAILJET_WEBHOOK_SECRET opens /webhooks/mailjet for Mailjet's event reports.`
+MAILJET_WEBHOOK_SECRET opens /webhooks/mailjet for Mailjet's event reports.
+ADMIN_EMAILS (comma-separated) are the admins, once their address is
+confirmed. SERVER_IP is the address users allow on their exchange keys.`
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -102,6 +104,12 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 			logf("MAILJET_API_KEY or MAILJET_SECRET_KEY is not set; emails go to the log")
 		}
 		srv.MailjetWebhookSecret = os.Getenv("MAILJET_WEBHOOK_SECRET")
+		for _, e := range strings.Split(os.Getenv("ADMIN_EMAILS"), ",") {
+			if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
+				srv.Admins = append(srv.Admins, e)
+			}
+		}
+		srv.ServerIP = os.Getenv("SERVER_IP")
 		addr := os.Getenv("APP_ADDR")
 		if addr == "" {
 			addr = ":8080"
@@ -161,22 +169,8 @@ func setTier(ctx context.Context, out io.Writer, st *store.Store, engine *api.Cl
 	if err != nil {
 		return err
 	}
-	var stopped []api.Stopped
-	if u.TenantReady {
-		change, err := engine.SetPlan(ctx, u.TenantID.String(), t.Plan)
-		if err != nil {
-			return fmt.Errorf("engine: %w", err)
-		}
-		stopped = change.Stopped
-	} else {
-		if _, err := engine.CreateTenant(ctx, api.NewTenant{ID: u.TenantID.String(), Name: u.Email, Plan: t.Plan}); err != nil {
-			return fmt.Errorf("engine: %w", err)
-		}
-		if err := st.SetTenantReady(ctx, u.ID); err != nil {
-			return err
-		}
-	}
-	if err := st.SetTier(ctx, u.ID, t.Name); err != nil {
+	stopped, err := web.ChangeTier(ctx, st, engine, u, t)
+	if err != nil {
 		return err
 	}
 	fmt.Fprintf(out, "%s is on %s: %s\n", email, t.Title, t.Describe())

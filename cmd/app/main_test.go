@@ -92,17 +92,21 @@ func TestTierSetGivesTheEngineTheNewPlan(t *testing.T) {
 	if err := run(ctx, []string{"tier", "set", "--email", "jo@example.com", "--tier", "pro"}, &out); err != nil {
 		t.Fatal(err)
 	}
-	// The tenant did not exist in the engine yet, so it was created on the new plan.
-	if len(plans) != 1 || plans[0].MaxAgents != 3 || !plans[0].Live {
-		t.Fatalf("plans sent: %+v", plans)
+	// The tenant comes once the address is confirmed, on the tier set by then.
+	u, _ := st.UserByEmail(ctx, "jo@example.com")
+	if len(plans) != 0 || u.Tier != "pro" {
+		t.Fatalf("before the tenant: plans %+v, tier %s", plans, u.Tier)
+	}
+	if err := st.SetTenantReady(ctx, u.ID); err != nil {
+		t.Fatal(err)
 	}
 	if err := run(ctx, []string{"tier", "set", "--email", "jo@example.com", "--tier", "standard"}, &out); err != nil {
 		t.Fatal(err)
 	}
-	if len(plans) != 2 || plans[1].MaxAgents != 1 || !plans[1].Live || !strings.Contains(out.String(), "stopped agent a1") {
-		t.Fatalf("second plan: %+v\n%s", plans, out.String())
+	if len(plans) != 1 || plans[0].MaxAgents != 1 || !plans[0].Live || !strings.Contains(out.String(), "stopped agent a1") {
+		t.Fatalf("plan: %+v\n%s", plans, out.String())
 	}
-	u, _ := st.UserByEmail(ctx, "jo@example.com")
+	u, _ = st.UserByEmail(ctx, "jo@example.com")
 	if u.Tier != "standard" || !u.TenantReady {
 		t.Fatalf("user: %+v", u)
 	}

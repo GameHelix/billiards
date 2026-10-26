@@ -103,6 +103,7 @@ type keysForm struct {
 	Binance      []keyView
 	LiveAllowed  bool
 	Setup        bool
+	ServerIP     string
 }
 
 func (s *Server) keysFormData(r *http.Request) (keysForm, error) {
@@ -119,7 +120,7 @@ func (s *Server) keysFormData(r *http.Request) (keysForm, error) {
 	if setup {
 		action = "/setup/keys"
 	}
-	return keysForm{CSRF: v.CSRF, Action: action, HasAnthropic: len(anthropic) > 0, Binance: binance, LiveAllowed: t.Plan.Live, Setup: setup}, nil
+	return keysForm{CSRF: v.CSRF, Action: action, HasAnthropic: len(anthropic) > 0, Binance: binance, LiveAllowed: t.Plan.Live, Setup: setup, ServerIP: s.ServerIP}, nil
 }
 
 func (s *Server) keysForm(w http.ResponseWriter, r *http.Request) {
@@ -695,7 +696,7 @@ func (s *Server) settingsPage(w http.ResponseWriter, r *http.Request, status int
 	}
 	t, _ := tiers.Get(v.User.Tier)
 	p := settingsPage{Tier: t, Anthropic: anthropic, Binance: binance,
-		Form: keysForm{CSRF: v.CSRF, Action: "/settings/keys", HasAnthropic: len(anthropic) > 0, Binance: binance, LiveAllowed: t.Plan.Live}}
+		Form: keysForm{CSRF: v.CSRF, Action: "/settings/keys", HasAnthropic: len(anthropic) > 0, Binance: binance, LiveAllowed: t.Plan.Live, ServerIP: s.ServerIP}}
 	s.render(w, r, "settings.html", status, page{Title: "Settings", Error: problem, Data: p})
 }
 
