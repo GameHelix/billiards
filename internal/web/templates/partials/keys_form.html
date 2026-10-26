@@ -1,46 +1,107 @@
 {{define "keys_form"}}
-<form method="post" action="{{.Action}}" class="card" autocomplete="off">
+<form method="post" action="{{.Action}}" class="card keys-form" autocomplete="off">
   <input type="hidden" name="csrf" value="{{.CSRF}}">
-  <fieldset><legend>Anthropic API key{{if .HasAnthropic}} <span class="muted">(stored; enter one to add another)</span>{{end}}</legend>
-    <label>Key <input type="password" name="anthropic_key" {{if not .HasAnthropic}}required{{end}} placeholder="sk-ant-…"></label>
-    <p class="muted">The agent's decisions run on your key and are billed to your account.</p>
-    <details class="howto"><summary>How to get this key</summary>
+  <div class="card-heading">
+    <span class="icon-tile">{{template "icon-key"}}</span>
+    <div>
+      <h2>
+        Connect your API keys
+      </h2>
+      <p class="muted">
+        A secure connection to your decision-making toolkit.
+      </p>
+    </div>
+  </div>
+  <fieldset>
+    <legend>
+      Anthropic API key{{if .HasAnthropic}} <span class="muted">(stored; enter one to add another)</span>{{end}}
+    </legend>
+    <label>
+      API key <input type="password" name="anthropic_key" {{if not .HasAnthropic}}required{{end}} placeholder="sk-ant-…" spellcheck="false">
+    </label>
+    <p class="muted">
+      The agent's decisions run on your key and are billed to your account.
+    </p>
+    <details class="howto">
+      <summary>
+        How to get this key
+      </summary>
       <ol>
-        <li>Sign in, or sign up, on <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">Anthropic's console, on its API keys page</a>.</li>
-        <li>Click <strong>Create key</strong>, name it and copy it. It starts with <code>sk-ant-</code> and is shown only once.</li>
-        <li>Add credits on the <a href="https://platform.claude.com/settings/billing" target="_blank" rel="noopener">Billing page</a>; your agent's decisions are paid from them.</li>
+        <li>
+          Sign in, or sign up, on <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">Anthropic's console, on its API keys page</a>.
+        </li>
+        <li>
+          Click <strong>Create key</strong>, name it and copy it. It starts with <code>sk-ant-</code> and is shown only once.
+        </li>
+        <li>
+          Add credits on the <a href="https://platform.claude.com/settings/billing" target="_blank" rel="noopener">Billing page</a>; your agent's decisions are paid from them.
+        </li>
       </ol>
     </details>
   </fieldset>
-  <fieldset><legend>Binance API key{{if .Binance}} <span class="muted">(stored; enter one to add another)</span>{{end}}</legend>
-    <label>Key <input type="password" name="binance_key" {{if not .Binance}}required{{end}}></label>
-    <label>Secret <input type="password" name="binance_secret" {{if not .Binance}}required{{end}}></label>
-    <label>Trades on
+  <fieldset>
+    <legend>
+      Binance API key{{if .Binance}} <span class="muted">(stored; enter one to add another)</span>{{end}}
+    </legend>
+    <label>
+      API key <input type="password" name="binance_key" placeholder="Your Binance API key" spellcheck="false" {{if not .Binance}}required{{end}}>
+    </label>
+    <label>
+      Secret key <input type="password" name="binance_secret" placeholder="Your Binance secret key" spellcheck="false" {{if not .Binance}}required{{end}}>
+    </label>
+    <label>
+      Trades on
       <select name="binance_mode">
-        <option value="testnet">Binance testnet, test funds (testnet.binance.vision)</option>
-        {{if .LiveAllowed}}<option value="live">Binance, real money</option>{{end}}
+      <option value="testnet">Binance testnet, test funds (testnet.binance.vision)</option>
+      {{if .LiveAllowed}}<option value="live">Binance, real money</option>{{end}}
       </select>
     </label>
-    <p class="muted">Spot trading only, no withdrawals: a key that can withdraw is refused.</p>
-    <details class="howto"><summary>How to get a testnet key, with test funds</summary>
+    <p class="muted">
+      Spot trading only, no withdrawals: a key that can withdraw is refused.
+    </p>
+    <details class="howto">
+      <summary>
+        How to get a testnet key, with test funds
+      </summary>
       <ol>
-        <li>Open <a href="https://testnet.binance.vision" target="_blank" rel="noopener">testnet.binance.vision</a> and click <strong>Log In with GitHub</strong>.</li>
-        <li>Generate an <strong>HMAC-SHA-256</strong> key, the kind where Binance makes the secret for you, and copy both the API key and the secret key.</li>
-        <li>The testnet account gets test balances by itself; nothing in it is real money.</li>
+        <li>
+          Open <a href="https://testnet.binance.vision" target="_blank" rel="noopener">testnet.binance.vision</a> and click <strong>Log In with GitHub</strong>.
+        </li>
+        <li>
+          Generate an <strong>HMAC-SHA-256</strong> key, the kind where Binance makes the secret for you, and copy both the API key and the secret key.
+        </li>
+        <li>
+          The testnet account gets test balances by itself; nothing in it is real money.
+        </li>
       </ol>
     </details>
     {{if .LiveAllowed}}
-    <details class="howto"><summary>How to get a real-money key</summary>
+    <details class="howto">
+      <summary>
+        How to get a real-money key
+      </summary>
       <ol>
-        <li>First, on Binance: turn on two-factor authentication, deposit any amount to your Spot Wallet, and verify your identity.</li>
-        <li>On <a href="https://www.binance.com/en/my/settings/api-management" target="_blank" rel="noopener">binance.com</a>, click your profile icon, then <strong>Account</strong> → <strong>API Management</strong> → <strong>Create API</strong>.</li>
-        <li>Choose <strong>System-generated</strong>, name the key and confirm with your 2FA device or passkey. Copy the API key and the secret key.</li>
-        <li>Edit the key's restrictions: restrict access to trusted IPs and add {{with .ServerIP}}<code>{{.}}</code>, this platform's address{{else}}this platform's server address{{end}}. Binance lets only IP-restricted keys trade.</li>
-        <li>Turn on spot trading, and leave withdrawals off.</li>
+        <li>
+          First, on Binance: turn on two-factor authentication, deposit any amount to your Spot Wallet, and verify your identity.
+        </li>
+        <li>
+          On <a href="https://www.binance.com/en/my/settings/api-management" target="_blank" rel="noopener">binance.com</a>, click your profile icon, then <strong>Account</strong> → <strong>API Management</strong> → <strong>Create API</strong>.
+        </li>
+        <li>
+          Choose <strong>System-generated</strong>, name the key and confirm with your 2FA device or passkey. Copy the API key and the secret key.
+        </li>
+        <li>
+          Edit the key's restrictions: restrict access to trusted IPs and add {{with .ServerIP}}<code>{{.}}</code>, this platform's address{{else}}this platform's server address{{end}}. Binance lets only IP-restricted keys trade.
+        </li>
+        <li>
+          Turn on spot trading, and leave withdrawals off.
+        </li>
       </ol>
     </details>
     {{end}}
   </fieldset>
-  <button>{{if .Setup}}Store keys and continue{{else}}Store{{end}}</button>
+  <div class="form-submit">
+    <span class="field-help">{{template "icon-lock"}} Sent securely to the engine vault</span><button>{{if .Setup}}Store keys and continue{{else}}Store keys{{end}} {{template "icon-arrow"}}</button>
+  </div>
 </form>
 {{end}}

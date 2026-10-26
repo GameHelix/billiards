@@ -1,16 +1,61 @@
 {{define "events"}}
-<h3>Recent events</h3>
-{{if not .}}<p class="muted">Nothing recorded yet.</p>{{else}}
-<table class="compact events">
-  <tbody>
-  {{range .}}
-  <tr>
-    <td class="muted nowrap">{{when .At}}</td>
-    <td class="nowrap">{{.Type}}</td>
-    <td class="wrap">{{.Summary}} <details><summary>raw</summary><pre>{{pretty .Raw}}</pre></details></td>
-  </tr>
-  {{end}}
-  </tbody>
-</table>
+<div class="card-heading">
+  <div>
+    <h2>
+      Recent activity
+    </h2>
+    <p class="muted">
+      A transparent record of every move.
+    </p>
+  </div>
+  <span class="icon-tile">{{template "icon-clock"}}</span>
+</div>
+{{if not .}}
+<div class="small-empty">
+  {{template "icon-clock"}}
+  <p>
+    Nothing recorded yet.
+  </p>
+  <span class="muted">Your agent's next steps will appear here.</span>
+</div>
+{{else}}
+<div class="table-scroll">
+  <table class="compact events">
+    <thead>
+      <tr>
+        <th scope="col">
+          When
+        </th>
+        <th scope="col">
+          Event
+        </th>
+        <th scope="col">
+          What happened
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .}}
+      <tr>
+        <td class="muted nowrap">
+          {{when .At}}
+        </td>
+        <td>
+          <code class="event-type">{{.Type}}</code>
+        </td>
+        <td class="wrap">
+          {{.Summary}}
+          <details>
+            <summary>
+              View details
+            </summary>
+            <pre>{{pretty .Raw}}</pre>
+          </details>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
 {{end}}
 {{end}}

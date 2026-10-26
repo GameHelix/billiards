@@ -3,32 +3,62 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#102c2b">
+<meta name="description" content="Your market, on autopilot. Thoughtful AI trading agents for Binance, with clear decisions, fixed risk limits, and updates on Telegram. Start with test funds.">
 <title>{{.Title}} · Candylario</title>
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/htmx.min.js" defer></script>
+<script src="/static/app.js" defer></script>
 </head>
-<body{{if .CSRF}} hx-headers='{"X-CSRF-Token": "{{.CSRF}}"}'{{end}}>
-<header>
-  <a class="brand" href="/">Candylario</a>
-  <nav>
-  {{if .User}}
-    <a href="/agents">Agents</a>
-    <a href="/telegram">Telegram</a>
-    <a href="/settings">Settings</a>
-    {{if .Admin}}<a href="/admin">Admin</a>{{end}}
-    <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link">Log out</button></form>
-  {{else}}
-    <a href="/login">Log in</a>
-    <a class="button" href="/signup">Sign up</a>
-  {{end}}
-  </nav>
+<body class="{{if .Workspace}}workspace{{else if eq .View "home"}}marketing{{else}}account-page{{end}}"{{if .CSRF}} hx-headers='{"X-CSRF-Token": "{{.CSRF}}"}'{{end}}>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="/" aria-label="Candylario home"><img src="/static/brand.svg" width="34" height="34" alt=""><span>candylario<span class="brand-dot">.</span></span></a>
+    {{if .Workspace}}<div class="workspace-label">{{if .Admin}}{{template "icon-shield"}}<span>Platform admin</span>{{else}}{{template "icon-grid"}}<span>Your workspace</span>{{end}}</div>
+    {{else if eq .View "home"}}<nav class="marketing-nav" aria-label="Main navigation"><a href="#how-it-works">How it works</a><a href="#features">Why Candylario</a><a href="#questions">FAQs</a></nav>{{end}}
+    <div class="header-actions">
+    {{if .User}}
+      <span class="user-avatar" aria-hidden="true">{{template "icon-user"}}</span><span class="header-email">{{.User.Email}}</span>
+      <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="icon-button logout" aria-label="Log out" title="Log out">{{template "icon-logout"}}</button></form>
+    {{else}}<a class="login-link" href="/login">Log in</a><a class="button small" href="/signup">Get started {{template "icon-arrow"}}</a>{{end}}
+    {{if or .Workspace (eq .View "home")}}<button class="icon-button menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="mobile-navigation">{{template "icon-menu"}}</button>{{end}}
+    </div>
+  </div>
 </header>
-<main>
-{{if .Flash}}<p class="flash">{{.Flash}}</p>{{end}}
-{{if .Error}}<p class="problem">{{.Error}}</p>{{end}}
+{{if .Workspace}}
+<div class="app-shell">
+  <aside class="sidebar" id="mobile-navigation">
+    {{if .Admin}}
+    <p class="nav-label">PLATFORM</p>
+    <nav class="app-nav" aria-label="Platform">
+      <a href="/admin"{{if eq .Section "admin"}} aria-current="page"{{end}}>{{template "icon-shield"}}<span>Accounts</span></a>
+    </nav>
+    <div class="sidebar-note"><span class="icon-tile">{{template "icon-shield"}}</span><strong>Your platform workspace.</strong><p>Manage accounts and tiers from one clear overview.</p><a href="/admin#admin-security">Account security {{template "icon-arrow"}}</a></div>
+    {{else}}
+    <p class="nav-label">WORKSPACE</p>
+    <nav class="app-nav" aria-label="Workspace">
+      <a href="/agents"{{if and (eq .Section "agents") (ne .View "agent_form")}} aria-current="page"{{end}}>{{template "icon-grid"}}<span>Overview</span></a>
+      <a href="/agents/new"{{if eq .View "agent_form"}} aria-current="page"{{end}}>{{template "icon-plus"}}<span>Create agent</span></a>
+      <a href="/telegram"{{if eq .Section "telegram"}} aria-current="page"{{end}}>{{template "icon-telegram"}}<span>Telegram</span></a>
+      <a href="/settings"{{if eq .Section "settings"}} aria-current="page"{{end}}>{{template "icon-settings"}}<span>Settings</span></a>
+    </nav>
+    <div class="sidebar-note"><span class="icon-tile">{{template "icon-leaf"}}</span><strong>Start small. Learn more.</strong><p>Explore your strategy with Binance test funds.</p><a href="/agents/new">Set up an agent {{template "icon-arrow"}}</a></div>
+    {{end}}
+    <div class="sidebar-bottom"><span class="status-dot"></span> A calmer market day.</div>
+  </aside>
+{{else if eq .View "home"}}
+<nav class="mobile-marketing-nav" id="mobile-navigation" aria-label="Mobile navigation"><a href="#how-it-works">How it works</a><a href="#features">Why Candylario</a><a href="#questions">FAQs</a></nav>
+{{end}}
+<main id="main" class="{{if .Workspace}}app-main{{else if eq .View "home"}}landing-main{{else}}account-main{{end}}" tabindex="-1">
+{{if .Flash}}<div class="flash notice" role="status">{{template "icon-check"}}<span>{{.Flash}}</span></div>{{end}}
+{{if .Error}}<div class="problem notice" role="alert">{{template "icon-info"}}<span>{{.Error}}</span></div>{{end}}
 {{template "content" .}}
 </main>
+{{if .Workspace}}</div>{{end}}
+{{if not .Workspace}}<footer class="site-footer"><div><a class="brand" href="/"><img src="/static/brand.svg" width="26" height="26" alt=""><span>candylario<span class="brand-dot">.</span></span></a><span>Thoughtful trading. Your control.</span></div><p>Crypto trading involves risk. Start with test funds.</p><span>© 2026 Candylario</span></footer>{{end}}
+<div id="request-notice" class="request-notice" role="alert" hidden></div>
 </body>
 </html>{{end}}

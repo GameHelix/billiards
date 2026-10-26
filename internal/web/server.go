@@ -191,18 +191,24 @@ func (s *Server) logged(next http.Handler) http.Handler {
 
 // page is what every full page gets.
 type page struct {
-	Title string
-	User  *store.User
-	CSRF  string
-	Flash string
-	Error string
-	Admin bool
-	Data  any
+	Title     string
+	View      string
+	Section   string
+	Workspace bool
+	User      *store.User
+	CSRF      string
+	Flash     string
+	Error     string
+	Admin     bool
+	Data      any
 }
 
 func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, status int, p page) {
+	p.View = strings.TrimSuffix(name, ".html")
+	p.Section = strings.Split(strings.TrimPrefix(r.URL.Path, "/"), "/")[0]
 	if v, ok := r.Context().Value(ctxKey{}).(viewer); ok {
 		p.User, p.CSRF, p.Admin = &v.User, v.CSRF, s.isAdmin(v.User)
+		p.Workspace = v.User.Verified()
 	}
 	if p.Flash == "" {
 		p.Flash = s.takeFlash(w, r)

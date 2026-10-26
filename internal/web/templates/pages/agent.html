@@ -1,7 +1,26 @@
 {{define "content"}}
-<h1>{{.Data.Agent.Name}} {{if eq .Data.Agent.Mode "testnet"}}<span class="badge test">testnet</span>{{else}}<span class="badge live">live</span>{{end}}</h1>
-<section id="status" hx-get="/agents/{{.Data.Agent.ID}}/status" hx-trigger="every 20s" hx-swap="innerHTML">{{template "status" .Data.Status}}</section>
-<div id="confirm"></div>
-<section id="chart" hx-get="/agents/{{.Data.Agent.ID}}/chart" hx-trigger="every 300s" hx-swap="innerHTML">{{template "chart" .Data.Chart}}</section>
-<section id="events" hx-get="/agents/{{.Data.Agent.ID}}/events" hx-trigger="every 20s" hx-swap="innerHTML">{{template "events" .Data.Events}}</section>
+<a class="back-link" href="/agents">← All agents</a>
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">AGENT WORKSPACE</span>
+    <h1>
+      {{.Data.Agent.Name}} {{if eq .Data.Agent.Mode "testnet"}}<span class="badge test">testnet</span>{{else}}<span class="badge live">live</span>{{end}}
+    </h1>
+    <p class="page-description">
+      The full picture. Every position, decision, and move.
+    </p>
+  </div>
+  <span class="refresh-label"><span class="status-dot"></span> Status refreshes every 20s</span>
+</div>
+<section id="status" hx-get="/agents/{{.Data.Agent.ID}}/status" hx-trigger="every 20s" hx-swap="innerHTML">
+  {{template "status" .Data.Status}}
+</section>
+<div id="confirm" aria-live="polite">
+</div>
+<section class="card" id="chart" hx-get="/agents/{{.Data.Agent.ID}}/chart" hx-trigger="every 300s" hx-swap="innerHTML">
+  {{template "chart" .Data.Chart}}
+</section>
+<section class="card" id="events" hx-get="/agents/{{.Data.Agent.ID}}/events" hx-trigger="every 20s" hx-swap="innerHTML">
+  {{template "events" .Data.Events}}
+</section>
 {{end}}

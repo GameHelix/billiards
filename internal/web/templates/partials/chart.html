@@ -1,10 +1,31 @@
 {{define "chart"}}
-<h3>Equity <span class="muted">· hourly, against buy and hold</span></h3>
-{{if lt .Points 2}}<p class="muted">No equity history yet; the first point arrives at the top of the hour.</p>{{else}}
-<svg viewBox="0 0 {{.Width}} {{.Height}}" class="chart" role="img" aria-label="Equity {{.Last}} against buy and hold {{.LastBench}}">
-  <path class="bench" d="{{.BuyAndHold}}"/>
-  <path class="{{if .Up}}equity up{{else}}equity down{{end}}" d="{{.Equity}}"/>
-</svg>
-<p class="muted"><span>{{.From}} – {{.To}} UTC</span> · <span>range {{.Min}} – {{.Max}}</span> · <span>now {{.Last}}, buy and hold {{.LastBench}}</span></p>
+<div class="card-heading">
+  <div>
+    <h2>
+      Performance over time
+    </h2>
+    <p class="muted">
+      Equity · hourly, against buy and hold
+    </p>
+  </div>
+  <div class="chart-legend">
+    <span><i class="legend-line"></i> Your agent</span><span><i class="legend-line benchmark"></i> Buy and hold</span>
+  </div>
+</div>
+{{if lt .Points 2}}
+<div class="chart-empty">
+  <span class="large-icon">{{template "icon-chart"}}</span>
+  <h3>
+    A little time. A clearer picture.
+  </h3>
+  <p class="muted">
+    No equity history yet; the first point arrives at the top of the hour.
+  </p>
+</div>
+{{else}}
+<svg viewBox="0 0 {{.Width}} {{.Height}}" class="chart" role="img" aria-label="Equity {{.Last}} against buy and hold {{.LastBench}}"><path class="bench" d="{{.BuyAndHold}}"/><path class="{{if .Up}}equity up{{else}}equity down{{end}}" d="{{.Equity}}"/></svg>
+<div class="chart-caption">
+  <span>{{.From}} – {{.To}} UTC</span><span>Range {{.Min}} – {{.Max}} · Now <strong>{{.Last}}</strong> · Buy and hold {{.LastBench}}</span>
+</div>
 {{end}}
 {{end}}

@@ -1,25 +1,147 @@
 {{define "content"}}
-<h1>Telegram</h1>
-{{if .Data.Setup}}<p class="steps">1 Keys · 2 Agent · <strong>3 Telegram</strong></p>{{end}}
-{{if not .Data.Configured}}
-<p>Telegram is not set up on this server.</p>
-{{else}}
-<p>Your agents' decisions, trades and alerts arrive in a Telegram chat, where you can also control them with /status, /decide, /stop, /resume and /sellall.</p>
-{{if .Data.Problem}}<p class="problem">{{.Data.Problem}}</p>{{end}}
-{{if .Data.Chats}}
-<table>
-  <thead><tr><th>Chat</th><th>Connected</th><th></th></tr></thead>
-  <tbody>
-  {{range .Data.Chats}}
-  <tr><td>{{.Name}}</td><td>{{when .LinkedAt}}</td>
-    <td><form method="post" action="/telegram/chats/{{.ChatID}}/disconnect"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="quiet">Disconnect</button></form></td></tr>
-  {{end}}
-  </tbody>
-</table>
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">LESS CHECKING. MORE KNOWING.</span>
+    <h1>
+      Your agent. In your pocket.
+    </h1>
+    <p class="page-description">
+      A direct line to your strategy, wherever the day takes you.
+    </p>
+  </div>
+  <span class="telegram-heading-icon">{{template "icon-telegram"}}</span>
+</div>
+{{if .Data.Setup}}
+<ol class="setup-steps" aria-label="Setup progress">
+  <li class="complete">
+    <span>{{template "icon-check"}}</span>
+    <div>
+      <strong>Connect keys</strong><small>Connected</small>
+    </div>
+  </li>
+  <li class="complete">
+    <span>{{template "icon-check"}}</span>
+    <div>
+      <strong>Create an agent</strong><small>Ready to go</small>
+    </div>
+  </li>
+  <li class="current" aria-current="step">
+    <span>3</span>
+    <div>
+      <strong>Telegram</strong><small>Stay in the loop</small>
+    </div>
+  </li>
+</ol>
 {{end}}
-<div id="link">
-  <button hx-post="/telegram/links" hx-target="#link" hx-swap="innerHTML">Connect a chat</button>
+<div class="form-layout">
+  <section class="card telegram-connect">
+    <div class="card-heading">
+      <span class="icon-tile blue">{{template "icon-telegram"}}</span>
+      <div>
+        <h2>
+          Connect Telegram
+        </h2>
+        <p class="muted">
+          Your next update is just a connection away.
+        </p>
+      </div>
+    </div>
+    {{if not .Data.Configured}}
+    <div class="soft-note">
+      {{template "icon-info"}} Telegram is not set up on this server.
+    </div>
+    <p class="muted">
+      You can still see every decision and manage your agents from the dashboard.
+    </p>
+    <a class="button quiet" href="/agents">Go to your agents {{template "icon-arrow"}}</a>{{else}}
+    <p>
+      Your agents' decisions, trades and alerts arrive in a Telegram chat. Keep an eye on your portfolio without keeping a tab open.
+    </p>
+    {{if .Data.Problem}}
+    <p class="problem notice" role="alert">
+      {{.Data.Problem}}
+    </p>
+    {{end}}{{if .Data.Chats}}
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">
+              Connected chat
+            </th>
+            <th scope="col">
+              Since
+            </th>
+            <th scope="col">
+              <span class="sr-only">Actions</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Data.Chats}}
+          <tr>
+            <td>
+              <strong>{{.Name}}</strong><span class="cell-subtitle"><span class="status-dot"></span> Connected</span>
+            </td>
+            <td class="muted">
+              {{when .LinkedAt}}
+            </td>
+            <td>
+              <form method="post" action="/telegram/chats/{{.ChatID}}/disconnect">
+                <input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="quiet small">Disconnect</button>
+              </form>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <div class="telegram-empty">
+      <span class="large-icon blue">{{template "icon-telegram"}}</span>
+      <h3>
+        A quieter way to keep up.
+      </h3>
+      <p class="muted">
+        Connect a chat to receive your first update.
+      </p>
+    </div>
+    {{end}}
+    <div id="link" aria-live="polite">
+      <button hx-post="/telegram/links" hx-disabled-elt="this" hx-target="#link" hx-swap="innerHTML">{{template "icon-plus"}} Connect a chat</button>
+    </div>
+    {{end}}
+  </section>
+  <aside class="form-aside">
+    <span class="eyebrow">A FEW WORDS GO A LONG WAY</span>
+    <h2>
+      You're a message away.
+    </h2>
+    <p>
+      Check in and take action with simple chat commands.
+    </p>
+    <dl class="command-list">
+    <div>
+      <dt><code>/status</code></dt><dd>Your portfolio at a glance</dd>
+    </div>
+    <div>
+      <dt><code>/decide</code></dt><dd>Ask for the next decision</dd>
+    </div>
+    <div>
+      <dt><code>/stop</code></dt><dd>Pause trading</dd>
+    </div>
+    <div>
+      <dt><code>/resume</code></dt><dd>Resume your strategy</dd>
+    </div>
+    <div>
+      <dt><code>/sellall</code></dt><dd>Sell all holdings</dd>
+    </div>
+    </dl>
+  </aside>
+</div>
+{{if .Data.Setup}}
+<div class="setup-finish">
+  <span class="muted">You can connect Telegram anytime.</span><a class="button" href="/agents">Continue to your agents {{template "icon-arrow"}}</a>
 </div>
 {{end}}
-{{if .Data.Setup}}<p><a href="/agents">Continue to your agents</a></p>{{end}}
 {{end}}

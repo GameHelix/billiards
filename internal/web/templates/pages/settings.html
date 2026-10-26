@@ -1,33 +1,139 @@
 {{define "content"}}
-<h1>Settings</h1>
-<section class="card">
-  <h2>Tier: {{.Data.Tier.Title}}</h2>
-  <p>{{.Data.Tier.Describe}}</p>
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">MAKE YOURSELF AT HOME</span>
+    <h1>
+      Your account, your way.
+    </h1>
+    <p class="page-description">
+      Manage your plan, connections, and account security.
+    </p>
+  </div>
+</div>
+<nav class="settings-nav" aria-label="Settings sections">
+  <a href="#plan">Your plan</a><a href="#connections">API connections</a><a href="#security">Security</a>
+</nav>
+<section class="card plan-card" id="plan">
+  <span class="icon-tile">{{template "icon-leaf"}}</span>
+  <div>
+    <span class="eyebrow">YOUR CURRENT PLAN</span>
+    <h2>
+      {{.Data.Tier.Title}} <span class="badge neutral">Current tier</span>
+    </h2>
+    <p>
+      {{.Data.Tier.Describe}}
+    </p>
+  </div>
+  <span class="plan-decoration" aria-hidden="true">{{template "icon-spark"}}</span>
 </section>
-<section class="card">
-  <h2>Keys</h2>
+<section class="card" id="connections">
+  <div class="card-heading">
+    <div>
+      <h2>
+        API connections
+      </h2>
+      <p class="muted">
+        Your toolkit, securely connected. Only key hints are displayed.
+      </p>
+    </div>
+    <span class="icon-tile">{{template "icon-key"}}</span>
+  </div>
   {{if or .Data.Anthropic .Data.Binance}}
-  <table>
-    <thead><tr><th>Kind</th><th>Key</th><th>Added</th><th></th></tr></thead>
-    <tbody>
-    {{range .Data.Anthropic}}<tr><td>Anthropic</td><td>{{.Hint}}</td><td>{{when .CreatedAt}}</td>
-      <td><form method="post" action="/settings/keys/{{.ID}}/revoke" hx-confirm="Revoke this key? Agents using it stop."><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="quiet">Revoke</button></form></td></tr>{{end}}
-    {{range .Data.Binance}}<tr><td>Binance {{.Mode}}</td><td>{{.Hint}}</td><td>{{when .CreatedAt}}</td>
-      <td><form method="post" action="/settings/keys/{{.ID}}/revoke" hx-confirm="Revoke this key? The agent using it stops."><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="quiet">Revoke</button></form></td></tr>{{end}}
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">
+            Provider
+          </th>
+          <th scope="col">
+            Key
+          </th>
+          <th scope="col">
+            Connected
+          </th>
+          <th scope="col">
+            <span class="sr-only">Actions</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Data.Anthropic}}
+        <tr>
+          <td>
+            <strong>Anthropic</strong>
+          </td>
+          <td>
+            <code>{{.Hint}}</code>
+          </td>
+          <td class="muted">
+            {{when .CreatedAt}}
+          </td>
+          <td>
+            <form method="post" action="/settings/keys/{{.ID}}/revoke" hx-confirm="Revoke this key? Agents using it stop.">
+              <input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="quiet small">Revoke</button>
+            </form>
+          </td>
+        </tr>
+        {{end}}{{range .Data.Binance}}
+        <tr>
+          <td>
+            <strong>Binance</strong> <span class="badge {{if eq .Mode "testnet"}}test{{else}}live{{end}}">{{.Mode}}</span>
+          </td>
+          <td>
+            <code>{{.Hint}}</code>
+          </td>
+          <td class="muted">
+            {{when .CreatedAt}}
+          </td>
+          <td>
+            <form method="post" action="/settings/keys/{{.ID}}/revoke" hx-confirm="Revoke this key? The agent using it stops.">
+              <input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="quiet small">Revoke</button>
+            </form>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <div class="soft-note">
+    {{template "icon-key"}} No keys connected yet. Add your first connection below.
+  </div>
   {{end}}
-  <h3>Add a key</h3>
-  {{template "keys_form" .Data.Form}}
+  <details class="add-connection">
+    <summary>
+      {{template "icon-plus"}} Add a key <span>Expand</span>
+    </summary>
+    {{template "keys_form" .Data.Form}}
+  </details>
 </section>
-<section class="card">
-  <h2>Password</h2>
-  <form method="post" action="/settings/password" class="narrow">
+<section class="card" id="security">
+  <div class="card-heading">
+    <div>
+      <h2>
+        A fresh password
+      </h2>
+      <p class="muted">
+        Keep your account protected with a unique password.
+      </p>
+    </div>
+    <span class="icon-tile amber">{{template "icon-lock"}}</span>
+  </div>
+  <form method="post" action="/settings/password" class="password-form">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
-    <label>Current password <input type="password" name="current" required autocomplete="current-password"></label>
-    <label>New password <input type="password" name="password" minlength="10" maxlength="72" required autocomplete="new-password"></label>
-    <label>New password again <input type="password" name="again" minlength="10" maxlength="72" required autocomplete="new-password"></label>
-    <button>Change password</button>
+    <label>
+      Current password<input type="password" name="current" required autocomplete="current-password" placeholder="Your current password">
+    </label>
+    <div class="form-two-col">
+      <label>
+        New password<input type="password" name="password" minlength="10" maxlength="72" required autocomplete="new-password" placeholder="At least 10 characters">
+      </label>
+      <label>
+        New password again<input type="password" name="again" minlength="10" maxlength="72" required autocomplete="new-password" placeholder="Repeat new password">
+      </label>
+    </div>
+    <button>Change password {{template "icon-arrow"}}</button>
   </form>
 </section>
 {{end}}

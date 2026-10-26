@@ -1,19 +1,39 @@
 {{define "content"}}
-<h1>Confirm your email</h1>
-<section class="card narrow">
-  <p>We sent a link to <strong>{{.Data.Email}}</strong>. Open it to start; it works for 48 hours.</p>
-  {{with .Data.Problem}}<p class="problem">Mail to this address failed: {{.}}. Check it below.</p>{{end}}
-  <form method="post" action="/verify-email">
-    <input type="hidden" name="csrf" value="{{.CSRF}}">
-    <button>Send a new link</button>
-  </form>
-</section>
-<section class="card narrow">
-  <h2>Wrong address?</h2>
-  <form method="post" action="/verify-email/address">
-    <input type="hidden" name="csrf" value="{{.CSRF}}">
-    <label>Email <input type="email" name="email" value="{{.Data.Email}}" required autocomplete="email"></label>
-    <button>Change it and send a link</button>
-  </form>
-</section>
+<div class="auth-shell">
+  {{template "auth-aside"}}
+  <section class="auth-content">
+    <div class="auth-form-wrap">
+      <span class="large-icon">{{template "icon-mail"}}</span><span class="eyebrow">ONE SMALL STEP</span>
+      <h1>
+        Confirm your email.
+      </h1>
+      <p class="page-description">
+        We sent a link to <strong>{{.Data.Email}}</strong>. Open it to start; it works for 48 hours.
+      </p>
+      {{with .Data.Problem}}
+      <p class="problem notice" role="alert">
+        Mail to this address failed: {{.}}. Check it below.
+      </p>
+      {{end}}
+      <div class="soft-note">
+        {{template "icon-info"}} Take a look in spam if it hasn't arrived.
+      </div>
+      <form method="post" action="/verify-email">
+        <input type="hidden" name="csrf" value="{{.CSRF}}"><button class="full-width">Send a new link {{template "icon-arrow"}}</button>
+      </form>
+      <details class="address-correction">
+        <summary>
+          Wrong address?
+        </summary>
+        <form method="post" action="/verify-email/address">
+          <input type="hidden" name="csrf" value="{{.CSRF}}">
+          <label>
+            Email address<input type="email" name="email" value="{{.Data.Email}}" required autocomplete="email">
+          </label>
+          <button class="quiet full-width">Change it and send a link</button>
+        </form>
+      </details>
+    </div>
+  </section>
+</div>
 {{end}}

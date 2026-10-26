@@ -1,21 +1,119 @@
 {{define "content"}}
-<h1>Agents</h1>
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">YOUR WORKSPACE</span>
+    <h1>
+      A clear view of your agents.
+    </h1>
+    <p class="page-description">
+      Your strategies, their activity, and your next move.
+    </p>
+  </div>
+  {{if .Data.CanAdd}}<a class="button" href="/agents/new">{{template "icon-plus"}} New agent</a>{{end}}
+</div>
+<div class="overview-summary">
+  <div>
+    <span class="icon-tile">{{template "icon-spark"}}</span><span><span class="muted">Your agents</span><strong>{{len .Data.Agents}} <small>of {{.Data.Tier.Plan.MaxAgents}} available</small></strong></span>
+  </div>
+  <div>
+    <span class="icon-tile amber">{{template "icon-shield"}}</span><span><span class="muted">Current plan</span><strong>{{.Data.Tier.Title}} <small>tier</small></strong></span>
+  </div>
+  <div>
+    <span class="icon-tile blue">{{template "icon-clock"}}</span><span><span class="muted">Always your call</span><strong>You're in control <small>Pause or resume anytime</small></strong></span>
+  </div>
+</div>
 {{if not .Data.Agents}}
-<p>No agents yet. <a class="button" href="/setup">Set up your first agent</a></p>
+<section class="card empty-state">
+  <div class="empty-orbit">
+    <span class="large-icon">{{template "icon-spark"}}</span><span class="empty-coin">₿</span><span class="empty-coin eth">Ξ</span>
+  </div>
+  <span class="eyebrow">A LITTLE POTENTIAL. A FRESH START.</span>
+  <h2>
+    Meet your first market co-pilot.
+  </h2>
+  <p>
+    No agents yet. Set up your keys, choose your coins, and let your strategy take its first steps with test funds.
+  </p>
+  <a class="button" href="/setup">Set up your first agent {{template "icon-arrow"}}</a>
+  <div class="empty-checks">
+    <span>{{template "icon-check"}} Guided setup</span><span>{{template "icon-check"}} Test funds to start</span><span>{{template "icon-check"}} Clear risk limits</span>
+  </div>
+</section>
 {{else}}
-<table>
-  <thead><tr><th>Agent</th><th>Mode</th><th>State</th><th>Equity</th></tr></thead>
-  <tbody>
-  {{range .Data.Agents}}
-  <tr>
-    <td><a href="/agents/{{.ID}}">{{.Name}}</a></td>
-    <td>{{if eq .Mode "testnet"}}<span class="badge test">testnet</span>{{else}}<span class="badge live">live</span>{{end}}</td>
-    <td>{{if .Problem}}{{.Problem}}{{else if .Running}}running, trading {{.Trading}}{{else if eq .Status "active"}}starting{{else}}stopped{{end}}</td>
-    <td>{{if .Equity}}{{money .Equity}} USDT{{end}}</td>
-  </tr>
-  {{end}}
-  </tbody>
-</table>
-{{if .Data.CanAdd}}<p><a class="button quiet" href="/agents/new">New agent</a></p>{{else}}<p class="muted">Your {{.Data.Tier.Title}} tier runs {{.Data.Tier.Plan.MaxAgents}} agent(s).</p>{{end}}
+<section class="card agent-list">
+  <div class="card-heading">
+    <div>
+      <h2>
+        Your agents <span class="count-badge">{{len .Data.Agents}}</span>
+      </h2>
+      <p class="muted">
+        Open an agent to see the full picture.
+      </p>
+    </div>
+    <label class="search-field">
+      <span class="sr-only">Search agents</span>{{template "icon-search"}}<input type="search" placeholder="Find an agent…" data-search="#agent-table" aria-controls="agent-table">
+    </label>
+  </div>
+  <div class="table-scroll">
+    <table id="agent-table">
+      <thead>
+        <tr>
+          <th scope="col">
+            Agent
+          </th>
+          <th scope="col">
+            Environment
+          </th>
+          <th scope="col">
+            Status
+          </th>
+          <th scope="col" class="align-right">
+            Equity
+          </th>
+          <th scope="col">
+            <span class="sr-only">Open</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Data.Agents}}
+        <tr data-search-row>
+          <td>
+            <a class="agent-name" href="/agents/{{.ID}}"><span class="agent-symbol">{{template "icon-spark"}}</span><strong>{{.Name}}</strong></a>
+          </td>
+          <td>
+            {{if eq .Mode "testnet"}}<span class="badge test">testnet</span>{{else}}<span class="badge live">live</span>{{end}}
+          </td>
+          <td>
+            {{if .Problem}}<span class="status-text warning">{{.Problem}}</span>{{else if .Running}}<span class="badge running"><span class="status-dot"></span> running</span><span class="cell-subtitle">trading {{.Trading}}</span>{{else if eq .Status "active"}}<span class="badge neutral">starting</span>{{else}}<span class="badge neutral">stopped</span>{{end}}
+          </td>
+          <td class="align-right tabular">
+            {{if .Equity}}<strong>{{money .Equity}}</strong> <span class="muted">USDT</span>{{else}}<span class="muted">—</span>{{end}}
+          </td>
+          <td>
+            <a class="icon-button" href="/agents/{{.ID}}" aria-label="Open {{.Name}}">{{template "icon-arrow"}}</a>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="search-empty muted" role="status" hidden>
+    No agents match your search.
+  </p>
+  <div class="card-footer">
+    {{if .Data.CanAdd}}<a class="text-link" href="/agents/new">{{template "icon-plus"}} Create another agent</a>{{else}}<span class="muted">Your {{.Data.Tier.Title}} tier runs {{.Data.Tier.Plan.MaxAgents}} agent(s).</span>{{end}}<span class="muted">A little less watching. A little more living.</span>
+  </div>
+</section>
 {{end}}
+<div class="tip-banner">
+  <span class="icon-tile blue">{{template "icon-telegram"}}</span>
+  <div>
+    <strong>Your agent, wherever you are.</strong>
+    <p>
+      Get decisions and trade updates delivered straight to Telegram.
+    </p>
+  </div>
+  <a class="text-link" href="/telegram">Connect Telegram {{template "icon-arrow"}}</a>
+</div>
 {{end}}

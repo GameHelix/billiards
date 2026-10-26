@@ -1,27 +1,118 @@
 {{define "content"}}
-<h1>Admin</h1>
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">PLATFORM WORKSPACE</span>
+    <h1>
+      A little order behind the scenes.
+    </h1>
+    <p class="page-description">
+      Manage accounts, review access, and keep the platform moving.
+    </p>
+  </div>
+  <span class="badge neutral">Admin</span>
+</div>
 <section class="card">
-  <h2>Accounts</h2>
-  <table>
-    <thead><tr><th>Email</th><th>Address</th><th>Tier</th><th>Agents</th><th>Since</th></tr></thead>
-    <tbody>
-    {{range .Data.Rows}}
-    <tr>
-      <td>{{.User.Email}}</td>
-      <td>{{if .User.Verified}}confirmed{{else}}unconfirmed{{end}}{{with .User.EmailProblem}} · {{.}}{{end}}</td>
-      <td>
-        <form method="post" action="/admin/users/{{.User.ID}}/tier" class="row">
-          <input type="hidden" name="csrf" value="{{$.CSRF}}">
-          {{$tier := .User.Tier}}
-          <select name="tier">{{range $.Data.Tiers}}<option value="{{.Name}}"{{if eq .Name $tier}} selected{{end}}>{{.Title}}</option>{{end}}</select>
-          <button class="quiet">Set</button>
-        </form>
-      </td>
-      <td>{{if .Problem}}{{.Problem}}{{else if .User.TenantReady}}{{.Running}} running of {{.Agents}}{{else}}none yet{{end}}</td>
-      <td>{{when .User.CreatedAt}}</td>
-    </tr>
-    {{end}}
-    </tbody>
-  </table>
+  <div class="card-heading">
+    <div>
+      <h2>
+        Accounts <span class="count-badge">{{len .Data.Rows}}</span>
+      </h2>
+      <p class="muted">
+        Account confirmation, tiers, and agent activity.
+      </p>
+    </div>
+    <label class="search-field">
+      <span class="sr-only">Search accounts</span>{{template "icon-search"}}<input type="search" placeholder="Find an account…" data-search="#accounts-table" aria-controls="accounts-table">
+    </label>
+  </div>
+  <div class="table-scroll">
+    <table id="accounts-table">
+      <thead>
+        <tr>
+          <th scope="col">
+            Email
+          </th>
+          <th scope="col">
+            Address
+          </th>
+          <th scope="col">
+            Tier
+          </th>
+          <th scope="col">
+            Agents
+          </th>
+          <th scope="col">
+            Since
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Data.Rows}}
+        <tr data-search-row>
+          <td>
+            <strong>{{.User.Email}}</strong>{{if .Admin}}<span class="cell-subtitle">Platform admin</span>{{end}}
+          </td>
+          <td>
+            {{if .User.Verified}}<span class="badge running">confirmed</span>{{else}}<span class="badge test">unconfirmed</span>{{end}}{{with .User.EmailProblem}}<span class="cell-subtitle warning">{{.}}</span>{{end}}
+          </td>
+          <td>
+            {{if .Admin}}<span class="badge neutral">Admin · no tier</span>{{else}}
+            <form method="post" action="/admin/users/{{.User.ID}}/tier" class="row">
+              <input type="hidden" name="csrf" value="{{$.CSRF}}">{{$tier := .User.Tier}}
+              <label class="sr-only" for="tier-{{.User.ID}}">
+                Tier for {{.User.Email}}
+              </label>
+              <select id="tier-{{.User.ID}}" name="tier">{{range $.Data.Tiers}}<option value="{{.Name}}"{{if eq .Name $tier}} selected{{end}}>{{.Title}}</option>{{end}}</select><button class="quiet small">Set</button>
+            </form>
+            {{end}}
+          </td>
+          <td>
+            {{if .Admin}}<span class="muted">Does not trade</span>{{else if .Problem}}<span class="warning">{{.Problem}}</span>{{else if .User.TenantReady}}{{.Running}} running of {{.Agents}}{{else}}<span class="muted">none yet</span>{{end}}
+          </td>
+          <td class="muted nowrap">
+            {{when .User.CreatedAt}}
+          </td>
+        </tr>
+        {{else}}
+        <tr>
+          <td colspan="5" class="muted">
+            No accounts yet.
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="search-empty muted" role="status" hidden>
+    No accounts match your search.
+  </p>
+</section>
+<section class="card" id="admin-security">
+  <div class="card-heading">
+    <div>
+      <h2>
+        Account security
+      </h2>
+      <p class="muted">
+        Keep your admin account protected with a unique password.
+      </p>
+    </div>
+    <span class="icon-tile amber">{{template "icon-lock"}}</span>
+  </div>
+  <form method="post" action="/admin/password" class="password-form">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>
+      Current password<input type="password" name="current" required autocomplete="current-password" placeholder="Your current password">
+    </label>
+    <div class="form-two-col">
+      <label>
+        New password<input type="password" name="password" minlength="10" maxlength="72" required autocomplete="new-password" placeholder="At least 10 characters">
+      </label>
+      <label>
+        New password again<input type="password" name="again" minlength="10" maxlength="72" required autocomplete="new-password" placeholder="Repeat new password">
+      </label>
+    </div>
+    <button>Change password {{template "icon-arrow"}}</button>
+  </form>
 </section>
 {{end}}
