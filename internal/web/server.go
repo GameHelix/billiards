@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"io/fs"
 	"net/http"
 	"net/url"
@@ -40,6 +41,8 @@ type Server struct {
 	BaseURL  string
 	Mail     mail.Sender // nil writes emails to the log
 	Logf     func(format string, args ...any)
+	// Commit is the source commit the app was built from, for /healthz.
+	Commit string
 
 	// MailjetWebhookSecret is the password Mailjet's event reports carry;
 	// empty turns the webhook off.
@@ -140,38 +143,47 @@ func (s *Server) Handler() http.Handler {
 }
 
 // health says whether the app, the engine and the notifier all answer, for
-// an uptime monitor: 200 when they do, 503 naming the ones that do not.
+// an uptime monitor: 200 when they do, 503 naming the ones that do not. It
+// also reports the commit each service runs, so a deploy can be checked.
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	parts := map[string]bool{"app": s.Store.Ping(ctx) == nil, "engine": answers(ctx, s.Engine.BaseURL)}
+	up := map[string]bool{"app": s.Store.Ping(ctx) == nil}
+	commits := map[string]string{"app": s.Commit}
+	up["engine"], commits["engine"] = answers(ctx, s.Engine.BaseURL)
 	if s.Notifier != nil {
-		parts["notifier"] = answers(ctx, s.Notifier.BaseURL)
+		up["notifier"], commits["notifier"] = answers(ctx, s.Notifier.BaseURL)
 	}
+	out := map[string]any{"commits": commits}
 	ok := true
-	for _, up := range parts {
-		ok = ok && up
+	for name, v := range up {
+		out[name], ok = v, ok && v
 	}
-	parts["ok"] = ok
+	out["ok"] = ok
 	status := http.StatusOK
 	if !ok {
 		status = http.StatusServiceUnavailable
 	}
-	writeJSON(w, status, parts)
+	writeJSON(w, status, out)
 }
 
-// answers says whether a Candylario service's health check answers 200.
-func answers(ctx context.Context, base string) bool {
+// answers says whether a Candylario service's health check answers 200,
+// and which commit it reports running.
+func answers(ctx context.Context, base string) (bool, string) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(base, "/")+"/v1/health", nil)
 	if err != nil {
-		return false
+		return false, ""
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return false
+		return false, ""
 	}
-	resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
+	defer resp.Body.Close()
+	var h struct {
+		Commit string `json:"commit"`
+	}
+	json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&h)
+	return resp.StatusCode == http.StatusOK, h.Commit
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

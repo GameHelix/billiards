@@ -16,7 +16,7 @@ services:
 
   app:
     build: .
-    image: app:local
+    image: ${IMAGE:-app:local}
     env_file:
       - path: .env
         required: false

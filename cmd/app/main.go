@@ -38,6 +38,10 @@ MAILJET_WEBHOOK_SECRET opens /webhooks/mailjet for Mailjet's event reports.
 ADMIN_EMAILS (comma-separated) are the admins, once their address is
 confirmed. SERVER_IP is the address users allow on their exchange keys.`
 
+// commit is the source commit this binary was built from, set by the
+// Dockerfile with -ldflags "-X main.commit=...".
+var commit = "dev"
+
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -79,7 +83,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		if len(args) > 1 {
 			return errors.New("serve takes no arguments")
 		}
-		srv := &web.Server{Store: st, Engine: engine, BaseURL: os.Getenv("APP_BASE_URL"), Logf: logf}
+		srv := &web.Server{Store: st, Engine: engine, BaseURL: os.Getenv("APP_BASE_URL"), Commit: commit, Logf: logf}
 		if srv.BaseURL == "" {
 			srv.BaseURL = "http://127.0.0.1:3000"
 		}
