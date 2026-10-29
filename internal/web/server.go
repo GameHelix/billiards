@@ -124,6 +124,7 @@ func (s *Server) Handler() http.Handler {
 		"GET /agents/{id}/events":                s.agentEvents,
 		"GET /agents/{id}/chart":                 s.agentChart,
 		"GET /agents/{id}/sellall":               s.sellAllForm,
+		"GET /activity":                          s.activity,
 		"POST /agents/{id}/commands":             s.command,
 		"POST /agents/{id}/start":                s.startAgent,
 		"POST /agents/{id}/stop":                 s.stopAgent,

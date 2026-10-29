@@ -48,6 +48,14 @@ func templateScenarios() []templateScenario {
 		AISpend:      &api.AISpend{TodayUSD: .21, DailyLimitUSD: 5, MonthUSD: 1.8, MonthlyLimitUSD: 100}}
 	points := []engine.Point{{At: now.Add(-3 * time.Hour), Equity: 1000, BuyAndHold: 1000}, {At: now.Add(-2 * time.Hour), Equity: 1015, BuyAndHold: 1010}, {At: now.Add(-time.Hour), Equity: 1027, BuyAndHold: 1021}, {At: now, Equity: 1048.72, BuyAndHold: 1031.25}}
 	events := []eventView{{At: now, Type: "decision.complete", Summary: "A scheduled review completed.", Raw: json.RawMessage(`{"summary":"Market context <script>alert(1)</script>"}`)}}
+	entries := eventViews([]api.Event{
+		{Seq: 52, At: now, Type: "notice", Hash: "3fa29c0e1d2b4a5f6e7d8c9b", Payload: json.RawMessage(`{"text":"🧪 ⚠️ Price data unavailable <script>alert(1)</script>","alert":"prices"}`)},
+		{Seq: 51, At: now.Add(-time.Minute), Type: "trade.booked", Hash: "9d8e7f", Payload: json.RawMessage(`{"trade":{"side":"BUY","symbol":"BTCUSDT","qty":"0.001","avg_price":"67000"}}`)},
+		{Seq: 50, At: now.Add(-2 * time.Minute), Type: "something.new", Payload: json.RawMessage(`{"a":"x"}`)},
+	})
+	log := activityPage{Agent: agent, Agents: []link{{Title: "steady-btc", URL: "/activity?agent=steady-btc", Current: true}, {Title: "eth-swing", URL: "/activity?agent=eth-swing"}},
+		Filters: []link{{Title: "All", URL: "/activity?agent=steady-btc", Current: true}, {Title: "Trades", URL: "/activity?agent=steady-btc&show=trades"}},
+		Rows:    activityRows{Events: entries, Newer: "/activity?after=52&agent=steady-btc", Older: "/activity?agent=steady-btc&before=50"}}
 	return []templateScenario{
 		{"home", "home", "/", nil, nil, []string{"A little more", "Illustrative preview", "id=\"how-it-works\""}},
 		{"login", "login", "/login", nil, nil, []string{"Welcome back.", "autocomplete=\"current-password\""}},
@@ -63,8 +71,11 @@ func templateScenarios() []templateScenario {
 		{"agents-limit", "agents", "/agents", &user, agentsPage{Tier: trial, Agents: []agentRow{{Agent: agent, Problem: "status unavailable"}}}, []string{"status unavailable", "Your Trial tier runs"}},
 		{"setup-keys", "setup_keys", "/setup/keys", &user, keys, []string{"aria-current=\"step\"", "testnet.binance.vision", "sk-ant-"}},
 		{"new-agent", "agent_form", "/setup/agent", &user, form, []string{"New agent", "value=\"BTCUSDT\"", "Create and start"}},
-		{"agent", "agent", "/agents/steady-btc", &user, agentPage{Agent: agent, Status: statusView{Agent: agent, Status: &status}, Chart: buildChart(points), Events: events}, []string{"1048.72", "strong buy", "Market context &lt;script&gt;", "Sell everything", "hx-trigger=\"every 20s\""}},
+		{"agent", "agent", "/agents/steady-btc", &user, agentPage{Agent: agent, Status: statusView{Agent: agent, Status: &status}, Chart: buildChart(points), Updates: updatesView{Agent: agent.ID, Events: events}}, []string{"1048.72", "strong buy", "Market context &lt;script&gt;", "Sell everything", "hx-trigger=\"every 20s\"", "A scheduled review completed.", `href="/activity?agent=steady-btc"`}},
 		{"agent-waiting", "agent", "/agents/steady-btc", &user, agentPage{Agent: api.Agent{ID: agent.ID, Name: agent.Name, Mode: "testnet", Status: "stopped"}, Status: statusView{Agent: api.Agent{ID: agent.ID, Status: "stopped"}, Problem: "Not started yet."}}, []string{"Start agent", "No equity history yet", "Nothing recorded yet."}},
+		{"activity", "activity", "/activity", &user, log, []string{"Every move, on record.", "eth-swing", "show=trades", "Price data unavailable &lt;script&gt;", "Trade booked", "something.new", "Entry 52", "3fa29c0e1d2b4a5f", "Load older entries", "before=50", "after=52", `href="/activity" aria-current="page"`}},
+		{"activity-empty", "activity", "/activity", &user, activityPage{}, []string{"Nothing on record yet.", "/setup"}},
+		{"activity-problem", "activity", "/activity", &user, activityPage{Agent: agent, Problem: "The log is not available right now."}, []string{"The log is not available right now."}},
 		{"telegram", "telegram", "/telegram", &user, telegramPage{Configured: true, Setup: true}, []string{"Connect a chat", "aria-current=\"step\"", "/sellall"}},
 		{"telegram-off", "telegram", "/telegram", &user, telegramPage{}, []string{"Telegram is not set up on this server."}},
 		{"telegram-connected", "telegram", "/telegram", &user, telegramPage{Configured: true, Chats: []notifier.Chat{{ChatID: 42, Name: "@founder", LinkedAt: now}}}, []string{"@founder", "/telegram/chats/42/disconnect"}},
@@ -140,6 +151,9 @@ func TestInteractiveFragmentsRender(t *testing.T) {
 		{"status", statusView{Agent: api.Agent{ID: "agent-1", Status: "stopped"}, Message: "Done: sell_all", ClearConfirm: true}, `id="confirm" hx-swap-oob`},
 		{"tglink", newLinkView(notifier.Link{URL: "https://t.me/TestBot?start=code1", ExpiresAt: time.Now().Add(time.Minute)}), "Open in Telegram"},
 		{"tglink", linkView{Problem: "Telegram is not reachable"}, "Try again"},
+		{"activity-rows", activityRows{Newer: "/activity?after=7&agent=a"}, `hx-trigger="every 20s"`},
+		{"activity-rows", activityRows{Events: eventViews([]api.Event{{Seq: 1, Type: "account.created", Payload: json.RawMessage(`{}`)}}), Start: true}, "Start of the record"},
+		{"events", updatesView{Agent: "agent-1"}, "Nothing recorded yet."},
 	} {
 		t.Run(tc.name+"/"+tc.want, func(t *testing.T) {
 			w := httptest.NewRecorder()

@@ -2,15 +2,15 @@
 <div class="card-heading">
   <div>
     <h2>
-      Recent activity
+      Latest updates
     </h2>
     <p class="muted">
-      A transparent record of every move.
+      What your agent told you lately, as Telegram gets it.
     </p>
   </div>
-  <span class="icon-tile">{{template "icon-clock"}}</span>
+  <a class="text-link" href="/activity?agent={{.Agent}}">Full activity log {{template "icon-arrow"}}</a>
 </div>
-{{if not .}}
+{{if not .Events}}
 <div class="small-empty">
   {{template "icon-clock"}}
   <p>
@@ -19,43 +19,13 @@
   <span class="muted">Your agent's next steps will appear here.</span>
 </div>
 {{else}}
-<div class="table-scroll">
-  <table class="compact events">
-    <thead>
-      <tr>
-        <th scope="col">
-          When
-        </th>
-        <th scope="col">
-          Event
-        </th>
-        <th scope="col">
-          What happened
-        </th>
-      </tr>
-    </thead>
-    <tbody>
-      {{range .}}
-      <tr>
-        <td class="muted nowrap">
-          {{when .At}}
-        </td>
-        <td>
-          <code class="event-type">{{.Type}}</code>
-        </td>
-        <td class="wrap">
-          {{.Summary}}
-          <details>
-            <summary>
-              View details
-            </summary>
-            <pre>{{pretty .Raw}}</pre>
-          </details>
-        </td>
-      </tr>
-      {{end}}
-    </tbody>
-  </table>
-</div>
+<ol class="update-list">
+  {{range .Events}}
+  <li{{if .Alert}} class="alert"{{end}}>
+    <time class="muted nowrap" datetime="{{.At.UTC.Format "2006-01-02T15:04:05Z"}}">{{when .At}}</time>
+    <p class="wrap">{{.Summary}}</p>
+  </li>
+  {{end}}
+</ol>
 {{end}}
 {{end}}

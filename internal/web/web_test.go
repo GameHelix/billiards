@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -257,13 +258,25 @@ func (f *fakeEngine) server(t *testing.T) *httptest.Server {
 		reply(w, 200, api.CommandResult{OK: true, Message: "Done: " + c.Command})
 	}))
 	mux.HandleFunc("GET /v1/tenants/{t}/agents/{a}/events", withAgent(func(w http.ResponseWriter, r *http.Request, a *api.Agent) {
-		after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
-		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-		types := r.URL.Query().Get("type")
+		q := r.URL.Query()
+		after, _ := strconv.ParseInt(q.Get("after"), 10, 64)
+		before, err := strconv.ParseInt(q.Get("before"), 10, 64)
+		if err != nil {
+			before = math.MaxInt64
+		}
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		types := q.Get("type")
 		out := api.EventList{Events: []api.Event{}}
 		for _, e := range f.events[a.ID] {
-			if e.Seq > after && (types == "" || strings.Contains(","+types+",", ","+e.Type+",")) && len(out.Events) < limit {
+			if e.Seq > after && e.Seq < before && (types == "" || strings.Contains(","+types+",", ","+e.Type+",")) {
 				out.Events = append(out.Events, e)
+			}
+		}
+		if len(out.Events) > limit {
+			if q.Has("before") {
+				out.Events = out.Events[len(out.Events)-limit:]
+			} else {
+				out.Events = out.Events[:limit]
 			}
 		}
 		reply(w, 200, out)
@@ -703,6 +716,76 @@ func TestAgentPageShowsTheAccountAndTakesCommands(t *testing.T) {
 	}
 }
 
+func TestActivityLogPagesThroughTheRecordByGroup(t *testing.T) {
+	r := newRig(t)
+	csrf := r.signup("hal@example.com")
+	r.addKeys(csrf)
+	id := r.createAgent(csrf)
+	types := []string{"decision.started", "model.call", "decision.finished", "notice", "trade.booked"}
+	add := func(seq int) {
+		r.engine.mu.Lock()
+		defer r.engine.mu.Unlock()
+		r.engine.events[id] = append(r.engine.events[id], api.Event{Seq: int64(seq), ID: uuid.NewString(), Type: types[seq%len(types)],
+			At: time.Now().Add(time.Duration(seq-200) * time.Minute), Hash: fmt.Sprintf("%064x", seq), Payload: json.RawMessage(fmt.Sprintf(`{"text":"update %d"}`, seq))})
+	}
+	for seq := 1; seq <= 120; seq++ {
+		add(seq)
+	}
+	more := func(path string) (int, string) {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodGet, r.app.URL+path, nil)
+		req.Header.Set("HX-Request", "true")
+		resp, err := r.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(body)
+	}
+	entry := func(seq int) string { return fmt.Sprintf("Entry %d ·", seq) }
+
+	if _, body := r.get("/agents"); !strings.Contains(body, `href="/activity"`) {
+		t.Fatal("the sidebar leads to the activity log")
+	}
+	resp, body := r.get("/activity")
+	if resp.StatusCode != 200 || !strings.Contains(body, entry(120)) || !strings.Contains(body, entry(71)) || strings.Contains(body, entry(70)) ||
+		!strings.Contains(body, "before=71") || !strings.Contains(body, "after=120") || !strings.Contains(body, `href="/activity" aria-current="page"`) {
+		t.Fatalf("the newest page: %d %s", resp.StatusCode, body)
+	}
+	code, body := more("/activity?agent=" + id + "&before=71")
+	if code != 200 || !strings.Contains(body, entry(70)) || !strings.Contains(body, entry(21)) || strings.Contains(body, entry(20)) ||
+		!strings.Contains(body, "before=21") || strings.Contains(body, "after=") || strings.Contains(body, "<html") {
+		t.Fatalf("older entries: %d %s", code, body)
+	}
+	if code, body = more("/activity?agent=" + id + "&before=21"); code != 200 || !strings.Contains(body, entry(1)) || !strings.Contains(body, "Start of the record") || strings.Contains(body, "before=") {
+		t.Fatalf("the oldest entries: %d %s", code, body)
+	}
+	add(121)
+	if code, body = more("/activity?agent=" + id + "&after=120"); code != 200 || !strings.Contains(body, entry(121)) || !strings.Contains(body, "after=121") || strings.Contains(body, entry(120)) {
+		t.Fatalf("newer entries: %d %s", code, body)
+	}
+	if code, body = more("/activity?agent=" + id + "&after=121"); code != 200 || !strings.Contains(body, "after=121") || strings.Contains(body, "Entry ") {
+		t.Fatalf("nothing newer: %d %s", code, body)
+	}
+	_, body = r.get("/activity?agent=" + id + "&show=trades")
+	if !strings.Contains(body, "Trade booked") || strings.Contains(body, "Model call") || !strings.Contains(body, entry(119)) || strings.Contains(body, entry(120)) ||
+		!strings.Contains(body, entry(4)) || !strings.Contains(body, "Start of the record") {
+		t.Fatalf("only trades: %s", body)
+	}
+	if resp, body = r.get("/activity?agent=" + id + "&before=21"); !strings.Contains(body, entry(121)) || !strings.Contains(body, "<html") {
+		t.Fatalf("a cursor in an address opens the newest page: %d", resp.StatusCode)
+	}
+	if resp, _ = r.get("/activity?agent=" + uuid.NewString()); resp.StatusCode != 404 {
+		t.Fatalf("someone else's agent: %d", resp.StatusCode)
+	}
+	_, body = r.get("/agents/" + id)
+	if !strings.Contains(body, "update 118") || !strings.Contains(body, "update 98") || strings.Contains(body, "update 93") || strings.Contains(body, entry(118)) ||
+		!strings.Contains(body, "/activity?agent="+id) {
+		t.Fatalf("the agent page shows only its latest messages and leads to the log: %s", body)
+	}
+}
+
 func TestTelegramLinksAndChats(t *testing.T) {
 	r := newRig(t)
 	csrf := r.signup("gus@example.com")
@@ -1003,7 +1086,7 @@ func TestAdminIsNotAPlatformUser(t *testing.T) {
 	if n := r.tenants(); n != 0 {
 		t.Fatalf("the admin got %d engine tenants", n)
 	}
-	for _, p := range []string{"/", "/agents", "/setup", "/setup/keys", "/telegram", "/settings"} {
+	for _, p := range []string{"/", "/agents", "/activity", "/setup", "/setup/keys", "/telegram", "/settings"} {
 		if resp, _ := r.get(p); resp.StatusCode != 303 || resp.Header.Get("Location") != "/admin" {
 			t.Fatalf("%s for the admin: %d %s", p, resp.StatusCode, resp.Header.Get("Location"))
 		}

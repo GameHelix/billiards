@@ -1,0 +1,87 @@
+{{define "content"}}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">AUDIT LOG</span>
+    <h1>
+      Every move, on record.
+    </h1>
+    <p class="page-description">
+      What your agents saw, decided and did, newest first. Each entry is chained to the one before it, so none can be changed or removed unseen.
+    </p>
+  </div>
+  {{if .Data.Rows.Newer}}<span class="refresh-label"><span class="status-dot"></span> New entries appear as they happen</span>{{end}}
+</div>
+{{with .Data}}
+{{if not .Agent.ID}}
+<section class="card empty-state">
+  <span class="large-icon">{{template "icon-activity"}}</span>
+  <h2>
+    Nothing on record yet.
+  </h2>
+  <p>
+    Once an agent runs, every decision, trade and message it makes is recorded here.
+  </p>
+  <a class="button" href="/setup">Set up your first agent {{template "icon-arrow"}}</a>
+</section>
+{{else}}
+{{with .Agents}}
+<nav class="chips agent-chips" aria-label="Agents">
+  {{range .}}<a href="{{.URL}}"{{if .Current}} aria-current="page"{{end}}>{{.Title}}</a>{{end}}
+</nav>
+{{end}}
+<section class="card activity-log">
+  <div class="card-heading">
+    <div>
+      <h2>
+        {{.Agent.Name}} {{if eq .Agent.Mode "testnet"}}<span class="badge test">testnet</span>{{else}}<span class="badge live">live</span>{{end}}
+      </h2>
+      <p class="muted">
+        Open an entry's details for everything it recorded.
+      </p>
+    </div>
+    <a class="text-link" href="/agents/{{.Agent.ID}}">Agent workspace {{template "icon-arrow"}}</a>
+  </div>
+  <nav class="chips" aria-label="Show">
+    {{range .Filters}}<a href="{{.URL}}"{{if .Current}} aria-current="page"{{end}}>{{.Title}}</a>{{end}}
+  </nav>
+  {{if .Problem}}
+  <p class="soft-note">
+    {{template "icon-info"}} {{.Problem}}
+  </p>
+  {{else}}
+  <div class="table-scroll">
+    <table class="compact activity">
+      <thead>
+        <tr>
+          <th scope="col">
+            When
+          </th>
+          <th scope="col">
+            Event
+          </th>
+          <th scope="col">
+            What happened
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {{template "activity-rows" .Rows}}
+        <tr class="activity-empty">
+          <td colspan="3">
+            <div class="small-empty">
+              {{template "icon-clock"}}
+              <p>
+                Nothing recorded {{if .Filtered}}of this kind {{end}}yet.
+              </p>
+              <span class="muted">New entries appear here as they happen.</span>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+</section>
+{{end}}
+{{end}}
+{{end}}

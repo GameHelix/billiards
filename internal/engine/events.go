@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"slices"
@@ -17,9 +18,9 @@ import (
 	"github.com/candylario/trader/api"
 )
 
-// Events reads agents' audit logs and keeps what the dashboard shows: the
-// recent events and the hourly equity of each agent, fetched from where
-// the last fetch ended. The engine lists events oldest first.
+// Events reads agents' audit logs: pages of them for the activity log,
+// and each agent's hourly equity for its chart, which it keeps and fetches
+// from where the last fetch ended. The engine lists events oldest first.
 type Events struct {
 	Client *api.Client
 
@@ -31,12 +32,10 @@ type log struct {
 	mu     sync.Mutex
 	head   int64
 	events []api.Event
-	keep   int // 0 keeps everything
 }
 
 const (
 	pageSize   = 1000
-	keepRecent = 500
 	equityType = "equity.hourly"
 )
 
@@ -47,7 +46,7 @@ type Point struct {
 	BuyAndHold float64
 }
 
-func (e *Events) log(key string, keep int) *log {
+func (e *Events) log(key string) *log {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.logs == nil {
@@ -55,28 +54,35 @@ func (e *Events) log(key string, keep int) *log {
 	}
 	l := e.logs[key]
 	if l == nil {
-		l = &log{keep: keep}
+		l = &log{}
 		e.logs[key] = l
 	}
 	return l
 }
 
-// Recent returns the agent's last n events, newest first.
-func (e *Events) Recent(ctx context.Context, tenant, agent string, n int) ([]api.Event, error) {
-	events, err := e.fetch(ctx, e.log(agent, keepRecent), tenant, agent, "")
-	if err != nil {
-		return nil, err
+// Latest returns up to n of the agent's events before seq, newest first:
+// all of them, or only those of the given types. Before 0 starts at the
+// newest event.
+func (e *Events) Latest(ctx context.Context, tenant, agent string, before int64, types []string, n int) ([]api.Event, error) {
+	if before <= 0 {
+		before = math.MaxInt64
 	}
-	if len(events) > n {
-		events = events[len(events)-n:]
-	}
+	events, err := e.list(ctx, tenant, agent, url.Values{"before": {strconv.FormatInt(before, 10)}, "limit": {strconv.Itoa(n)}}, types)
 	slices.Reverse(events)
-	return events, nil
+	return events, err
+}
+
+// Since returns up to n of the agent's events after seq, newest first;
+// when there are more, the oldest n of them.
+func (e *Events) Since(ctx context.Context, tenant, agent string, after int64, types []string, n int) ([]api.Event, error) {
+	events, err := e.list(ctx, tenant, agent, url.Values{"after": {strconv.FormatInt(after, 10)}, "limit": {strconv.Itoa(n)}}, types)
+	slices.Reverse(events)
+	return events, err
 }
 
 // Equity returns the agent's hourly equity, oldest first.
 func (e *Events) Equity(ctx context.Context, tenant, agent string) ([]Point, error) {
-	events, err := e.fetch(ctx, e.log(agent+"|"+equityType, 0), tenant, agent, equityType)
+	events, err := e.fetch(ctx, e.log(agent+"|"+equityType), tenant, agent, []string{equityType})
 	if err != nil {
 		return nil, err
 	}
@@ -99,18 +105,18 @@ func (e *Events) Equity(ctx context.Context, tenant, agent string) ([]Point, err
 	return points, nil
 }
 
-// fetch brings the log up to date. With types, only those event types are
-// kept; the engine filters by type too when it can.
-func (e *Events) fetch(ctx context.Context, l *log, tenant, agent, types string) ([]api.Event, error) {
+// fetch brings a log of the given event types up to date. The engine
+// filters by type too when it can.
+func (e *Events) fetch(ctx context.Context, l *log, tenant, agent string, types []string) ([]api.Event, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	for {
-		batch, err := e.list(ctx, tenant, agent, l.head, types)
+		batch, err := e.list(ctx, tenant, agent, url.Values{"after": {strconv.FormatInt(l.head, 10)}, "limit": {strconv.Itoa(pageSize)}}, types)
 		if err != nil {
 			return nil, err
 		}
 		for _, ev := range batch {
-			if types == "" || slices.Contains(strings.Split(types, ","), ev.Type) {
+			if slices.Contains(types, ev.Type) {
 				l.events = append(l.events, ev)
 			}
 		}
@@ -121,16 +127,12 @@ func (e *Events) fetch(ctx context.Context, l *log, tenant, agent, types string)
 			break
 		}
 	}
-	if l.keep > 0 && len(l.events) > l.keep {
-		l.events = slices.Clone(l.events[len(l.events)-l.keep:])
-	}
 	return slices.Clone(l.events), nil
 }
 
-func (e *Events) list(ctx context.Context, tenant, agent string, after int64, types string) ([]api.Event, error) {
-	q := url.Values{"after": {strconv.FormatInt(after, 10)}, "limit": {strconv.Itoa(pageSize)}}
-	if types != "" {
-		q.Set("type", types)
+func (e *Events) list(ctx context.Context, tenant, agent string, q url.Values, types []string) ([]api.Event, error) {
+	if len(types) > 0 {
+		q.Set("type", strings.Join(types, ","))
 	}
 	u := strings.TrimRight(e.Client.BaseURL, "/") + "/v1/tenants/" + url.PathEscape(tenant) + "/agents/" + url.PathEscape(agent) + "/events?" + q.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
@@ -160,6 +162,72 @@ func (e *Events) list(ctx context.Context, tenant, agent string, after int64, ty
 	}
 	var out api.EventList
 	return out.Events, json.NewDecoder(resp.Body).Decode(&out)
+}
+
+// Group is a kind of event the activity log can show on its own.
+type Group struct {
+	Name, Title string
+	Types       []string
+}
+
+// Groups are the activity log's filters. Messages are what the agent told
+// the user, the same as reaches Telegram.
+var Groups = []Group{
+	{"decisions", "Decisions", []string{"decision.started", "news.alert", "decision.finished", "decision.failed", "call.graded", "lesson.recorded"}},
+	{"trades", "Trades", []string{"order.intent", "order.result", "trade.booked"}},
+	{"messages", "Messages", []string{"notice"}},
+	{"controls", "Controls", []string{"command.received", "trading.stopped", "trading.resumed", "agent.started", "agent.stopped", "account.created"}},
+	{"system", "System", []string{"model.call", "equity.hourly"}},
+}
+
+var labels = map[string]string{
+	"account.created": "Account opened", "agent.started": "Agent started", "agent.stopped": "Agent stopped",
+	"decision.started": "Decision started", "model.call": "Model call", "decision.finished": "Decision made",
+	"decision.failed": "Decision failed", "order.intent": "Order sent", "order.result": "Order result",
+	"trade.booked": "Trade booked", "trading.stopped": "Trading stopped", "trading.resumed": "Trading resumed",
+	"command.received": "Command", "equity.hourly": "Hourly equity", "call.graded": "Call graded",
+	"lesson.recorded": "Lesson learned", "news.alert": "News alert", "notice": "Message",
+}
+
+// Label names an event type for people; a type this app does not know
+// keeps its own name.
+func Label(typ string) string {
+	if l, ok := labels[typ]; ok {
+		return l
+	}
+	return typ
+}
+
+// GroupOf is the name of an event type's group, or "" for a type this app
+// does not know.
+func GroupOf(typ string) string {
+	for _, g := range Groups {
+		if slices.Contains(g.Types, typ) {
+			return g.Name
+		}
+	}
+	return ""
+}
+
+// Alert says whether an event reports a problem: a warning to the user, a
+// failed decision, or an order that did not go through.
+func Alert(e api.Event) bool {
+	var p struct {
+		Text    string `json:"text"`
+		Alert   string `json:"alert"`
+		Outcome string `json:"outcome"`
+	}
+	json.Unmarshal(e.Payload, &p)
+	switch e.Type {
+	case "decision.failed":
+		return true
+	case "order.result":
+		return p.Outcome != "filled" && p.Outcome != "recovered"
+	case "notice":
+		text := strings.TrimPrefix(p.Text, "🧪 ")
+		return p.Alert != "" || strings.HasPrefix(text, "⚠️") || strings.HasPrefix(text, "🛑")
+	}
+	return false
 }
 
 // Summary is one line about an event, for the dashboard. Payload text is

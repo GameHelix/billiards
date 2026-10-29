@@ -414,31 +414,11 @@ func (s *Server) statusView(ctx context.Context, tenant string, a api.Agent, mes
 	return v
 }
 
-type eventView struct {
-	Seq     int64
-	At      time.Time
-	Type    string
-	Summary string
-	Raw     json.RawMessage
-}
-
-func (s *Server) eventViews(ctx context.Context, tenant, agent string) ([]eventView, error) {
-	events, err := s.Events.Recent(ctx, tenant, agent, 50)
-	if err != nil {
-		return nil, err
-	}
-	views := make([]eventView, 0, len(events))
-	for _, e := range events {
-		views = append(views, eventView{Seq: e.Seq, At: e.At, Type: e.Type, Summary: engine.Summary(e), Raw: e.Payload})
-	}
-	return views, nil
-}
-
 type agentPage struct {
-	Agent  api.Agent
-	Status statusView
-	Events []eventView
-	Chart  chartView
+	Agent   api.Agent
+	Status  statusView
+	Updates updatesView
+	Chart   chartView
 }
 
 // agentOf finds the agent in the path, within the user's tenant.
@@ -463,12 +443,7 @@ func (s *Server) agent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	p := agentPage{Agent: a, Status: s.statusView(ctx, tenant, a, "")}
-	if events, err := s.eventViews(ctx, tenant, a.ID); err == nil {
-		p.Events = events
-	} else {
-		s.Logf("events of %s: %v", a.ID, err)
-	}
+	p := agentPage{Agent: a, Status: s.statusView(ctx, tenant, a, ""), Updates: s.updates(ctx, tenant, a.ID)}
 	if points, err := s.Events.Equity(ctx, tenant, a.ID); err == nil {
 		p.Chart = buildChart(points)
 	}
@@ -492,11 +467,7 @@ func (s *Server) agentEvents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	events, err := s.eventViews(ctx, tenant, a.ID)
-	if err != nil {
-		s.Logf("events of %s: %v", a.ID, err)
-	}
-	s.partial(w, "events", http.StatusOK, events)
+	s.partial(w, "events", http.StatusOK, s.updates(ctx, tenant, a.ID))
 }
 
 func (s *Server) agentChart(w http.ResponseWriter, r *http.Request) {

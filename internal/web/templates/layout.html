@@ -41,6 +41,7 @@
     <p class="nav-label">WORKSPACE</p>
     <nav class="app-nav" aria-label="Workspace">
       <a href="/agents"{{if and (eq .Section "agents") (ne .View "agent_form")}} aria-current="page"{{end}}>{{template "icon-grid"}}<span>Overview</span></a>
+      <a href="/activity"{{if eq .Section "activity"}} aria-current="page"{{end}}>{{template "icon-activity"}}<span>Activity</span></a>
       <a href="/agents/new"{{if eq .View "agent_form"}} aria-current="page"{{end}}>{{template "icon-plus"}}<span>Create agent</span></a>
       <a href="/telegram"{{if eq .Section "telegram"}} aria-current="page"{{end}}>{{template "icon-telegram"}}<span>Telegram</span></a>
       <a href="/settings"{{if eq .Section "settings"}} aria-current="page"{{end}}>{{template "icon-settings"}}<span>Settings</span></a>

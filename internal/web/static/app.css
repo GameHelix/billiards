@@ -392,11 +392,41 @@ table.compact td { padding: 12px 14px; font-size: 11px; }
 .chart-empty .large-icon .icon { width: 22px; height: 22px; }
 .chart-empty h3 { font-size: 13px; margin-bottom: 9px; }
 .chart-empty p { font-size: 11px; max-width: 280px; }
-.events .event-type { font-size: 11px; white-space: nowrap; }
-.events td:last-child { min-width: 200px; }
-.events details { margin-top: 5px; }
-.events summary { cursor: pointer; color: #6c7d5c; font-size: 11px; }
-.events pre { font-size: 11px; line-height: 1.7; background: #f5f8ef; padding: 14px; border: 1px solid var(--line); border-radius: 6px; overflow: auto; white-space: pre-wrap; max-width: 700px; }
+.heading-actions { display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+.heading-actions .button .icon { width: 14px; height: 14px; }
+.update-list { list-style: none; margin: 0; padding: 0; }
+.update-list li { display: grid; grid-template-columns: 125px minmax(0,1fr); gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 11px; }
+.update-list li:first-child { border-top: 0; padding-top: 0; }
+.update-list p { margin: 0; color: #4f6152; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.update-list .alert p, .update-list .alert time { color: var(--bad); }
+.chips { display: flex; flex-wrap: wrap; gap: 7px; margin: -6px 0 18px; }
+.chips a { display: inline-flex; align-items: center; min-height: 32px; padding: 6px 13px; border: 1px solid var(--line); border-radius: 999px; background: #fcfdf9; color: #68775e; font-size: 11px; font-weight: 500; white-space: nowrap; }
+.chips a:hover { border-color: #b9cdbf; color: var(--accent); }
+.chips a[aria-current] { background: #eaf1e2; border-color: #cfdcc3; color: #426a43; font-weight: 550; }
+.agent-chips { margin: 0 0 18px; }
+.activity .event-label { display: inline-flex; align-items: center; gap: 8px; font-weight: 550; color: var(--ink); }
+.event-dot { width: 7px; height: 7px; border-radius: 50%; background: #c3ccb9; flex: none; }
+.dot-decisions { background: #6ca05c; }
+.dot-trades { background: #c79a4b; }
+.dot-messages { background: #638da4; }
+.dot-controls { background: #8d7fb3; }
+.activity .alert .event-label { color: var(--bad); }
+.activity .alert .event-dot { background: var(--bad); }
+.event-summary { white-space: pre-line; }
+.activity td { vertical-align: top; }
+.activity td:last-child { min-width: 240px; }
+.activity details { margin-top: 5px; }
+.activity summary { cursor: pointer; color: #6c7d5c; font-size: 11px; width: max-content; }
+.activity pre { font-size: 11px; line-height: 1.7; background: #f5f8ef; padding: 14px; border: 1px solid var(--line); border-radius: 6px; overflow: auto; white-space: pre-wrap; max-width: 700px; margin: 8px 0; }
+.event-proof { color: #8b9980; font-size: 11px; }
+.event-proof code { font-size: 11px; }
+.activity tr.activity-more:hover, .activity tr.activity-start:hover, .activity tr.activity-empty:hover { background: none; }
+.activity-more td, .activity-start td { text-align: center; padding: 14px; }
+.activity-more button { min-height: 36px; padding: 8px 14px; font-size: 11px; }
+.activity-start td { color: #8b9980; font-size: 11px; }
+.activity-start .icon { width: 13px; height: 13px; vertical-align: -2px; margin-right: 4px; }
+.activity-empty td { padding: 0; }
+table.activity .event-row ~ .activity-empty { display: none; }
 .sell-confirm { display: flex; gap: 16px; background: #fffcf4; border-color: #eddbb8; }
 .sell-confirm h2 { margin-bottom: 10px; }
 .sell-confirm p { font-size: 12px; }
@@ -743,6 +773,17 @@ form.row .small { min-height: 34px; padding: 6px 10px; font-size: 11px; }
   .chart-legend { font-size: 11px; gap: 9px; }
   #chart > .card-heading { align-items: flex-start; flex-direction: column; }
   .activity-meta { font-size: 11px; }
+  .heading-actions .button { min-height: 39px; padding: 9px 12px; font-size: 11px; margin-top: 18px; }
+  #events > .card-heading, .activity-log > .card-heading { align-items: flex-start; flex-direction: column; }
+  .update-list li { grid-template-columns: 1fr; gap: 3px; }
+  table.activity, table.activity tbody { display: block; }
+  table.activity thead { display: none; }
+  table.activity tr { display: block; }
+  table.activity tr.event-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 5px 12px; padding: 13px 14px; border-bottom: 1px solid var(--line); }
+  table.activity tr:not(.event-row) td { display: block; }
+  table.activity .event-row td { padding: 0; border: 0; min-width: 0; }
+  table.activity .event-row td:first-child { order: 2; text-align: right; }
+  table.activity .event-row td:last-child { order: 3; grid-column: 1 / -1; }
   .plan-card { padding: 23px 20px; gap: 15px; }
   .plan-card p { font-size: 11px; padding-right: 0; }
   .plan-decoration { display: none; }

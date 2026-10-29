@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -63,8 +64,8 @@ func TestSummaryReadsKnownEvents(t *testing.T) {
 	}
 }
 
-// fakeLog serves 2,345 events, equity.hourly every tenth, honouring after,
-// limit and type.
+// fakeLog serves total events, equity.hourly every tenth and model.call
+// otherwise, honouring after, before, limit and type.
 func fakeLog(t *testing.T, total int) (*httptest.Server, *int) {
 	calls := 0
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -73,52 +74,105 @@ func fakeLog(t *testing.T, total int) (*httptest.Server, *int) {
 			w.WriteHeader(401)
 			return
 		}
-		after, _ := strconv.Atoi(r.URL.Query().Get("after"))
-		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-		types := r.URL.Query().Get("type")
+		q := r.URL.Query()
+		after, _ := strconv.Atoi(q.Get("after"))
+		before, err := strconv.Atoi(q.Get("before"))
+		if err != nil {
+			before = total + 1
+		}
+		limit, _ := strconv.Atoi(q.Get("limit"))
 		var out api.EventList
-		for seq := after + 1; seq <= total && len(out.Events) < limit; seq++ {
+		for seq := after + 1; seq <= total && seq < before; seq++ {
 			typ := "model.call"
 			if seq%10 == 0 {
 				typ = "equity.hourly"
 			}
-			if types != "" && typ != types {
+			if q.Get("type") != "" && !slices.Contains(strings.Split(q.Get("type"), ","), typ) {
 				continue
 			}
 			out.Events = append(out.Events, api.Event{Seq: int64(seq), Type: typ, At: time.Unix(int64(seq)*3600, 0),
 				Payload: json.RawMessage(`{"equity":"` + strconv.Itoa(seq) + `","buy_and_hold":"100"}`)})
+		}
+		if len(out.Events) > limit {
+			if q.Has("before") {
+				out.Events = out.Events[len(out.Events)-limit:]
+			} else {
+				out.Events = out.Events[:limit]
+			}
 		}
 		out.Events = append([]api.Event{}, out.Events...)
 		json.NewEncoder(w).Encode(out)
 	})), &calls
 }
 
-func TestEventsPageThroughTheLogAndKeepGoingFromTheEnd(t *testing.T) {
+func TestEventsReadFromEitherEndInOneCall(t *testing.T) {
 	srv, calls := fakeLog(t, 2345)
 	defer srv.Close()
 	e := &Events{Client: &api.Client{BaseURL: srv.URL, Token: "tok"}}
-	recent, err := e.Recent(t.Context(), "t", "a", 50)
-	if err != nil {
-		t.Fatal(err)
+	latest, err := e.Latest(t.Context(), "t", "a", 0, nil, 50)
+	if err != nil || len(latest) != 50 || latest[0].Seq != 2345 || latest[49].Seq != 2296 {
+		t.Fatalf("latest: %d events %v", len(latest), err)
 	}
-	if len(recent) != 50 || recent[0].Seq != 2345 || recent[49].Seq != 2296 {
-		t.Fatalf("recent: %d events, first seq %d", len(recent), recent[0].Seq)
+	older, err := e.Latest(t.Context(), "t", "a", 2296, []string{"equity.hourly"}, 3)
+	if err != nil || len(older) != 3 || older[0].Seq != 2290 || older[2].Seq != 2270 {
+		t.Fatalf("older equity: %+v %v", older, err)
+	}
+	newer, err := e.Since(t.Context(), "t", "a", 2340, nil, 50)
+	if err != nil || len(newer) != 5 || newer[0].Seq != 2345 || newer[4].Seq != 2341 {
+		t.Fatalf("newer: %+v %v", newer, err)
 	}
 	if *calls != 3 {
-		t.Errorf("%d calls to read 2345 events, want 3", *calls)
+		t.Errorf("%d calls for three reads", *calls)
 	}
+}
+
+func TestEquityPagesThroughTheLogAndKeepsGoingFromTheEnd(t *testing.T) {
+	srv, calls := fakeLog(t, 23450)
+	defer srv.Close()
+	e := &Events{Client: &api.Client{BaseURL: srv.URL, Token: "tok"}}
 	points, err := e.Equity(t.Context(), "t", "a")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(points) != 234 || points[0].Equity != 10 || points[233].Equity != 2340 {
+	if len(points) != 2345 || points[0].Equity != 10 || points[2344].Equity != 23450 {
 		t.Fatalf("equity: %d points", len(points))
 	}
-	before := *calls
-	if _, err := e.Recent(t.Context(), "t", "a", 50); err != nil {
+	if *calls != 3 {
+		t.Errorf("%d calls to read 2345 points, want 3", *calls)
+	}
+	if _, err := e.Equity(t.Context(), "t", "a"); err != nil {
 		t.Fatal(err)
 	}
-	if *calls != before+1 {
-		t.Errorf("a second read made %d calls, want 1", *calls-before)
+	if *calls != 4 {
+		t.Errorf("a second read made %d calls, want 1", *calls-3)
+	}
+}
+
+func TestEventTypesHaveNamesGroupsAndAlerts(t *testing.T) {
+	for _, g := range Groups {
+		for _, typ := range g.Types {
+			if Label(typ) == typ || GroupOf(typ) != g.Name {
+				t.Errorf("%s: label %q, group %q", typ, Label(typ), GroupOf(typ))
+			}
+		}
+	}
+	if Label("something.new") != "something.new" || GroupOf("something.new") != "" {
+		t.Error("unknown types keep their name and have no group")
+	}
+	for _, c := range []struct {
+		typ, payload string
+		alert        bool
+	}{
+		{"notice", `{"text":"🧪 Decision 3: hold BTC"}`, false},
+		{"notice", `{"text":"🧪 ⚠️ Price data unavailable","alert":"prices"}`, true},
+		{"notice", `{"text":"🛑 Trading stopped: daily loss"}`, true},
+		{"decision.failed", `{"error":"budget"}`, true},
+		{"order.result", `{"outcome":"filled"}`, false},
+		{"order.result", `{"outcome":"rejected","error":"-2010"}`, true},
+		{"trade.booked", `{}`, false},
+	} {
+		if got := Alert(api.Event{Type: c.typ, Payload: json.RawMessage(c.payload)}); got != c.alert {
+			t.Errorf("%s %s: alert %v", c.typ, c.payload, got)
+		}
 	}
 }

@@ -6,7 +6,8 @@ The Candylario app: accounts, tiers, onboarding and dashboards for the trading a
 - **Tiers:** trial (test funds, BTC and ETH, 1 agent, a decision every 4h), standard (real money allowed) and pro (more coins, 3 agents, hourly). Set by hand until payments exist, on the admin page or with `docker compose run --rm app tier set --email EMAIL --tier pro`.
 - **Admin:** `/admin` lists every account with its address, tier and agents, and changes tiers. Admins are the confirmed accounts whose address is in `ADMIN_EMAILS`; nothing in the app can make anyone else one.
 - **Onboarding:** keys (an Anthropic API key, and a Binance key for the testnet or real money) go straight to the engine's vault, which tries them; the form says how to get each key, with the server's address (`SERVER_IP`) for Binance's IP restriction. Then a first agent with its coins, capital and schedule, then a Telegram chat.
-- **Dashboard:** each agent's equity against buy and hold, positions, the last decision, hourly equity, the audit log, and the controls: decide now, stop or resume trading, sell everything, start or stop the agent.
+- **Dashboard:** each agent's equity against buy and hold, positions, the last decision, hourly equity, its latest messages, and the controls: decide now, stop or resume trading, sell everything, start or stop the agent.
+- **Activity:** each agent's audit log on its own page, newest first, filtered by decisions, trades, messages, controls or system events; new entries arrive every 20 seconds and older ones load on request. It needs an engine that reads its log backwards (`before`), so deploy the engine first.
 
 ## Run
 
