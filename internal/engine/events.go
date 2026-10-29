@@ -200,7 +200,11 @@ func Summary(e api.Event) string {
 		return strings.TrimSpace(str("outcome") + " " + str("error"))
 	case "trade.booked":
 		if t, ok := p["trade"].(map[string]any); ok {
-			return compact(t, "side", "symbol", "qty", "price", "quote_qty")
+			s := fmt.Sprintf("%v %v %v at %v", t["side"], t["qty"], t["symbol"], t["avg_price"])
+			if q, ok := t["quote_qty"].(string); ok {
+				s += " for " + q + " USDT"
+			}
+			return s
 		}
 	case "trading.stopped":
 		return strings.TrimSpace(str("kind") + ": " + str("reason"))
@@ -225,9 +229,35 @@ func Summary(e api.Event) string {
 			}
 		}
 	case "agent.started", "agent.stopped":
-		return strings.TrimSpace(fmt.Sprintf("cash %v %s", p["cash"], str("halted")))
+		s := strings.TrimSpace(fmt.Sprintf("cash %v %s", p["cash"], str("halted")))
+		if by := str("by"); by != "" {
+			s += " · by " + by
+		}
+		return s
 	case "model.call":
-		return compact(p, "purpose", "cost_usd", "millis")
+		s := strings.TrimSpace(str("purpose") + " · " + str("status"))
+		if cost, ok := p["cost_usd"].(float64); ok {
+			s += fmt.Sprintf(" · $%.4f", cost)
+		}
+		if ms, ok := p["latency_ms"].(float64); ok {
+			s += fmt.Sprintf(" · %.1f s", ms/1000)
+		}
+		if err := str("error"); err != "" {
+			s += " · " + err
+		}
+		return s
+	case "call.graded":
+		ret, _ := p["return"].(float64)
+		verdict := "wrong"
+		if p["hit"] == true {
+			verdict = "right"
+		}
+		return fmt.Sprintf("%s %s: %s, price %+.2f%%", str("symbol"), strings.ReplaceAll(str("rating"), "_", " "), verdict, ret*100)
+	case "lesson.recorded":
+		if l, ok := p["lesson"].(map[string]any); ok {
+			s, _ := l["text"].(string)
+			return s
+		}
 	}
 	return compact(p, sortedKeys(p)...)
 }

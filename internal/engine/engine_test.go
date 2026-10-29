@@ -49,6 +49,11 @@ func TestSummaryReadsKnownEvents(t *testing.T) {
 		{"equity.hourly", `{"equity":"100","buy_and_hold":"100.35"}`, "equity 100, buy and hold 100.35"},
 		{"command.received", `{"name":"decide","via":"app"}`, "decide via app"},
 		{"trading.stopped", `{"kind":"daily_loss","reason":"lost 10% today"}`, "daily_loss: lost 10% today"},
+		{"model.call", `{"purpose":"decide","status":"settled","cost_usd":0.0123,"latency_ms":3100}`, "decide · settled · $0.0123 · 3.1 s"},
+		{"trade.booked", `{"trade":{"side":"BUY","symbol":"BTCUSDT","qty":"0.001","avg_price":"67000","quote_qty":"67"}}`, "BUY 0.001 BTCUSDT at 67000 for 67 USDT"},
+		{"call.graded", `{"symbol":"BTCUSDT","rating":"strong_buy","return":0.0123,"hit":true}`, "BTCUSDT strong buy: right, price +1.23%"},
+		{"lesson.recorded", `{"lesson":{"text":"Fade spikes on thin weekend volume."}}`, "Fade spikes on thin weekend volume."},
+		{"agent.stopped", `{"cash":"100","by":"shutdown"}`, "cash 100 · by shutdown"},
 		{"something.new", `{"b":2,"a":"x"}`, "a x · b 2"},
 	}
 	for _, c := range cases {
