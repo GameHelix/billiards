@@ -8,17 +8,20 @@
   <p>Candylario watches every liquid perpetual on Hyperliquid, about a hundred coins, and posts an alert the moment one of them does something the record says is worth acting on. Each alert names the rule that raised it, tells you what happened after that kind of move on every perpetual since 2021, and says which trade that history argues for, with the stop it needs.</p>
 
   <h2>The alerts</h2>
-  <p>Every rule was measured on Binance's full history of USDT perpetuals from 2021 to 2026, coins with at least a million dollars traded in the day. The figures are the coin's median move over the following 24 hours and how often it was higher.</p>
-  <ul>
-    <li><strong>Pump-and-crash</strong> — a 10% fall in fifteen minutes after a 20% rise the day before. Median −6.2% a day later, higher only 36% of the time, in every year. Suggests a short with a 10% stop.</li>
-    <li><strong>Unpumped crash</strong> — the same fall in a coin that had not been pumped. Median +5.9%, higher 65% of the time; weaker since 2025. Suggests a long with a 15% stop, because such coins dip a further 8–10% first.</li>
-    <li><strong>Crowded rise</strong> — a 2% rise in an hour with open interest up 10%: longs piling in. Median −2.8%, higher 36% of the time, every year. Suggests a short with an 8% stop.</li>
-    <li><strong>Spike rejected</strong> — a 5% spike given back within the quarter hour. Median −2.6%. Suggests a short with an 8% stop.</li>
-    <li><strong>Big hour</strong> — a 6% move in an hour. Rises have faded in every year (median −2.4%); suggests a short. Falls carry no reliable signal and come without a suggestion.</li>
-    <li><strong>Big move</strong> — a fifteen-minute move three times the coin's usual, on twice the usual volume. Rises on volume have faded (median −1.4%, every year).</li>
-    <li><strong>Funding flip</strong> — funding at −0.2% per eight hours or below, once a day per coin: shorts paying longs, and the record says the fall continues (median −2.2%).</li>
-    <li><strong>Open interest swing</strong> — open interest up or down 10% in an hour with a 2% move. Small edge; raised for information.</li>
-  </ul>
+  <table class="triggers">
+    <thead><tr><th>Trigger</th><th>What it is</th><th>Record (perps 2021–2026, 24h after)</th><th>Suggests</th></tr></thead>
+    <tbody>
+      <tr><td><strong>pump-and-crash</strong></td><td>−10% in 15 min after a +20% day</td><td>−6.2% median, 36% up, every year</td><td>short, stop 10%</td></tr>
+      <tr><td><strong>unpumped crash</strong></td><td>−10% in 15 min, no pump before</td><td>+5.9%, 65% up (weaker since 2025)</td><td>long, stop 15%</td></tr>
+      <tr><td><strong>crowded rise</strong></td><td>+2% in 1h with open interest +10%</td><td>−2.8%, 36% up, every year</td><td>short, stop 8%</td></tr>
+      <tr><td><strong>spike rejected</strong></td><td>a 5% spike given back within 15 min</td><td>−2.6%, 42% up</td><td>short, stop 8%</td></tr>
+      <tr><td><strong>big hour</strong></td><td>±6% in an hour</td><td>up: −2.4%, every year</td><td>short on rises</td></tr>
+      <tr><td><strong>big move</strong></td><td>15-min move 3σ on 2× volume</td><td>up: −1.4%, every year</td><td>short on volume</td></tr>
+      <tr><td><strong>funding flip</strong></td><td>funding ≤ −0.2%/8h, once a day</td><td>−2.2%, 38% up</td><td>short, stop 8%</td></tr>
+      <tr><td><strong>open interest swing</strong></td><td>±10% OI with a 2% move</td><td>small</td><td>—</td></tr>
+    </tbody>
+  </table>
+  <p>The record is the coin's median move over the following 24 hours and how often it was higher, on Binance's full history of USDT perpetuals, coins with at least a million dollars traded in the day. "Every year" means the direction held in each year from 2021 to 2026.</p>
   <p>Ideas the data rejected, so you will not see them: volume or open interest without a price move, very high funding, short squeezes, buying after four green candles, and breakouts to new highs, which have faded rather than run.</p>
 
   <h2>What an alert looks like</h2>
