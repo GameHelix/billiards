@@ -18,7 +18,7 @@
   <div class="header-inner">
     <a class="brand" href="/" aria-label="Candylario home"><img src="/static/brand.svg" width="34" height="34" alt=""><span>candylario<span class="brand-dot">.</span></span></a>
     {{if .Workspace}}<div class="workspace-label">{{if .Admin}}{{template "icon-shield"}}<span>Platform admin</span>{{else}}{{template "icon-grid"}}<span>Your workspace</span>{{end}}</div>
-    {{else if eq .View "home"}}<nav class="marketing-nav" aria-label="Main navigation"><a href="#how-it-works">How it works</a><a href="#features">Why Candylario</a><a href="#questions">FAQs</a></nav>{{end}}
+    {{else if eq .View "home"}}<nav class="marketing-nav" aria-label="Main navigation"><a href="/radar">Radar</a><a href="#how-it-works">How it works</a><a href="#features">Why Candylario</a><a href="#questions">FAQs</a></nav>{{end}}
     <div class="header-actions">
     {{if .User}}
       <span class="user-avatar" aria-hidden="true">{{template "icon-user"}}</span><span class="header-email">{{.User.Email}}</span>
@@ -51,7 +51,7 @@
     <div class="sidebar-bottom"><span class="status-dot"></span> A calmer market day.</div>
   </aside>
 {{else if eq .View "home"}}
-<nav class="mobile-marketing-nav" id="mobile-navigation" aria-label="Mobile navigation"><a href="#how-it-works">How it works</a><a href="#features">Why Candylario</a><a href="#questions">FAQs</a></nav>
+<nav class="mobile-marketing-nav" id="mobile-navigation" aria-label="Mobile navigation"><a href="/radar">Radar</a><a href="#how-it-works">How it works</a><a href="#features">Why Candylario</a><a href="#questions">FAQs</a></nav>
 {{end}}
 <main id="main" class="{{if .Workspace}}app-main{{else if eq .View "home"}}landing-main{{else}}account-main{{end}}" tabindex="-1">
 {{if .Flash}}<div class="flash notice" role="status">{{template "icon-check"}}<span>{{.Flash}}</span></div>{{end}}

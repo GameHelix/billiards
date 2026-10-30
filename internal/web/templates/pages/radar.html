@@ -1,0 +1,37 @@
+{{define "content"}}
+<article class="legal">
+  <span class="eyebrow">WHAT CANDYLARIO DOES TODAY</span>
+  <h1>The radar, on Telegram</h1>
+  <p class="muted">Live since October 29, 2026. Free, no keys, no sign-up: join <a href="https://t.me/candylario">t.me/candylario</a>.</p>
+
+  <h2>What you get</h2>
+  <p>Candylario watches every liquid perpetual on Hyperliquid, about a hundred coins, and posts an alert the moment one of them does something the record says is worth acting on. Each alert names the rule that raised it, tells you what happened after that kind of move on every perpetual since 2021, and says which trade that history argues for, with the stop it needs.</p>
+
+  <h2>The alerts</h2>
+  <p>Every rule was measured on Binance's full history of USDT perpetuals from 2021 to 2026, coins with at least a million dollars traded in the day. The figures are the coin's median move over the following 24 hours and how often it was higher.</p>
+  <ul>
+    <li><strong>Pump-and-crash</strong> — a 10% fall in fifteen minutes after a 20% rise the day before. Median −6.2% a day later, higher only 36% of the time, in every year. Suggests a short with a 10% stop.</li>
+    <li><strong>Unpumped crash</strong> — the same fall in a coin that had not been pumped. Median +5.9%, higher 65% of the time; weaker since 2025. Suggests a long with a 15% stop, because such coins dip a further 8–10% first.</li>
+    <li><strong>Crowded rise</strong> — a 2% rise in an hour with open interest up 10%: longs piling in. Median −2.8%, higher 36% of the time, every year. Suggests a short with an 8% stop.</li>
+    <li><strong>Spike rejected</strong> — a 5% spike given back within the quarter hour. Median −2.6%. Suggests a short with an 8% stop.</li>
+    <li><strong>Big hour</strong> — a 6% move in an hour. Rises have faded in every year (median −2.4%); suggests a short. Falls carry no reliable signal and come without a suggestion.</li>
+    <li><strong>Big move</strong> — a fifteen-minute move three times the coin's usual, on twice the usual volume. Rises on volume have faded (median −1.4%, every year).</li>
+    <li><strong>Funding flip</strong> — funding at −0.2% per eight hours or below, once a day per coin: shorts paying longs, and the record says the fall continues (median −2.2%).</li>
+    <li><strong>Open interest swing</strong> — open interest up or down 10% in an hour with a 2% move. Small edge; raised for information.</li>
+  </ul>
+  <p>Ideas the data rejected, so you will not see them: volume or open interest without a price move, very high funding, short squeezes, buying after four green candles, and breakouts to new highs, which have faded rather than run.</p>
+
+  <h2>What an alert looks like</h2>
+  <p><strong>🔻 pump-and-crash · XYZ −12.0% in 15m, −9.0% in 1h, +41.0% today · after +60.2% the day before, 8× the usual volume, 24h volume $12M · $1.20</strong><br>After 1,604 such alerts (perps, 2021–2026): 4h median −1.3%, 46% up; 24h −6.2%, 36% up.<br>💡 short with a 10% stop: a crash after a pump has kept falling</p>
+  <p>The history line is a record, not a promise: medians over thousands of past alerts, before fees, and the past does not bind the next trade. Treat every suggestion as a starting point for your own decision.</p>
+
+  <h2>What is coming</h2>
+  <ul>
+    <li><strong>One-tap trades.</strong> Long or Short under each alert, on Hyperliquid, with the stop-loss placed on the exchange in the same order, so the position is protected even if our servers stop. The engine already does this; the buttons are next.</li>
+    <li><strong>Connect a wallet, not keys.</strong> You approve an agent wallet from your own wallet in the browser. It can trade for your account and can never withdraw. No API keys, no model keys, nothing to paste.</li>
+    <li><strong>A fee per trade, no subscription.</strong> A small builder fee rides on each order you choose to place; alerts stay free.</li>
+  </ul>
+  <p>The automated AI agents described elsewhere on this site were Candylario's first design and are being retired in favour of the radar and one-tap trades.</p>
+  <p>Questions: <a href="mailto:ismat.samadov@candy.surf">ismat.samadov@candy.surf</a>.</p>
+</article>
+{{end}}
