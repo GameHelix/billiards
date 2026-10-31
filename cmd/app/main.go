@@ -1,11 +1,10 @@
-// Command app is the Candylario app: accounts, tiers, onboarding and
-// dashboards on the engine API.
+// Command app is the Candylario app: the public pages, accounts, and
+// connecting Telegram chats.
 package main
 
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,15 +19,13 @@ import (
 	"github.com/candylario/app/internal/mail"
 	"github.com/candylario/app/internal/notifier"
 	"github.com/candylario/app/internal/store"
-	"github.com/candylario/app/internal/tiers"
 	"github.com/candylario/app/internal/web"
 )
 
-const usage = `app — Candylario accounts, tiers and dashboards
+const usage = `app — Candylario accounts and pages
 
-  app serve                              run the web app on APP_ADDR (default :8080)
-  app tier set --email EMAIL --tier T    change an account's tier: trial, standard or pro
-  app users                              list accounts
+  app serve    run the web app on APP_ADDR (default :8080)
+  app users    list accounts
 
 Needs DATABASE_URL, ENGINE_API_URL and ENGINE_API_TOKEN. Telegram needs
 NOTIFIER_API_URL and NOTIFIER_API_TOKEN. APP_BASE_URL is the public address.
@@ -36,7 +33,7 @@ Email needs MAILJET_API_KEY and MAILJET_SECRET_KEY, and sends from
 no-reply@APP_DOMAIN (or MAIL_FROM); without them emails go to the log.
 MAILJET_WEBHOOK_SECRET opens /webhooks/mailjet for Mailjet's event reports.
 ADMIN_EMAILS (comma-separated) are the admins, once their address is
-confirmed. SERVER_IP is the address users allow on their exchange keys.`
+confirmed.`
 
 // commit is the source commit this binary was built from, set by the
 // Dockerfile with -ldflags "-X main.commit=...".
@@ -113,7 +110,6 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 				srv.Admins = append(srv.Admins, e)
 			}
 		}
-		srv.ServerIP = os.Getenv("SERVER_IP")
 		addr := os.Getenv("APP_ADDR")
 		if addr == "" {
 			addr = ":8080"
@@ -130,22 +126,6 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 			return err
 		}
 		return nil
-	case "tier":
-		if len(args) < 2 || args[1] != "set" {
-			return errors.New("usage: app tier set --email EMAIL --tier NAME")
-		}
-		fs := flag.NewFlagSet("tier set", flag.ContinueOnError)
-		fs.SetOutput(io.Discard)
-		email := fs.String("email", "", "account email")
-		name := fs.String("tier", "", "tier name")
-		if err := fs.Parse(args[2:]); err != nil || *email == "" || fs.NArg() != 0 {
-			return errors.New("usage: app tier set --email EMAIL --tier NAME")
-		}
-		t, ok := tiers.Get(*name)
-		if !ok {
-			return fmt.Errorf("tier must be one of %s", strings.Join(tiers.Names(), ", "))
-		}
-		return setTier(ctx, out, st, engine, strings.ToLower(strings.TrimSpace(*email)), t)
 	case "users":
 		users, err := st.Users(ctx)
 		if err != nil {
@@ -156,30 +136,9 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 			if u.Verified() {
 				confirmed = "confirmed"
 			}
-			fmt.Fprintf(out, "%s\t%s\t%s\ttenant %s\t%s\n", u.Email, confirmed, u.Tier, u.TenantID, u.CreatedAt.UTC().Format("2006-01-02"))
+			fmt.Fprintf(out, "%s\t%s\ttenant %s\t%s\n", u.Email, confirmed, u.TenantID, u.CreatedAt.UTC().Format("2006-01-02"))
 		}
 		return nil
 	}
 	return fmt.Errorf("unknown command %q; run `app help`", args[0])
-}
-
-// setTier moves an account to a tier and gives the engine the new plan,
-// which stops any agent the plan no longer allows.
-func setTier(ctx context.Context, out io.Writer, st *store.Store, engine *api.Client, email string, t tiers.Tier) error {
-	u, err := st.UserByEmail(ctx, email)
-	if errors.Is(err, store.ErrNotFound) {
-		return fmt.Errorf("no account %s", email)
-	}
-	if err != nil {
-		return err
-	}
-	stopped, err := web.ChangeTier(ctx, st, engine, u, t)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(out, "%s is on %s: %s\n", email, t.Title, t.Describe())
-	for _, s := range stopped {
-		fmt.Fprintf(out, "stopped agent %s: %s\n", s.AgentID, s.Reason)
-	}
-	return nil
 }

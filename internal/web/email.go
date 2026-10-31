@@ -135,7 +135,7 @@ func (s *Server) verify(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin", http.StatusSeeOther)
 	case loggedIn && v.User.ID == u.ID:
 		s.flash(w, "Email confirmed.")
-		http.Redirect(w, r, "/setup", http.StatusSeeOther)
+		http.Redirect(w, r, "/telegram", http.StatusSeeOther)
 	default:
 		s.flash(w, "Email confirmed; log in.")
 		http.Redirect(w, r, "/login", http.StatusSeeOther)

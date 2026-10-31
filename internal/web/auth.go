@@ -17,7 +17,6 @@ import (
 	"github.com/candylario/trader/api"
 
 	"github.com/candylario/app/internal/store"
-	"github.com/candylario/app/internal/tiers"
 )
 
 type ctxKey struct{}
@@ -128,19 +127,15 @@ func (s *Server) landing(u store.User) string {
 	if s.isAdmin(u) {
 		return "/admin"
 	}
-	return "/agents"
+	return "/telegram"
 }
 
-// ensureTenant creates the user's tenant in the engine, on their tier. The
-// id is the app's, so a retry after a timeout finds the same tenant.
+// ensureTenant creates the user's tenant in the engine. The id is the
+// app's, so a retry after a timeout finds the same tenant.
 func (s *Server) ensureTenant(ctx context.Context, u *store.User) error {
-	t, ok := tiers.Get(u.Tier)
-	if !ok {
-		return fmt.Errorf("unknown tier %q", u.Tier)
-	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	if _, err := s.Engine.CreateTenant(ctx, api.NewTenant{ID: u.TenantID.String(), Name: u.Email, Plan: t.Plan}); err != nil {
+	if _, err := s.Engine.CreateTenant(ctx, api.NewTenant{ID: u.TenantID.String(), Name: u.Email}); err != nil {
 		return err
 	}
 	if err := s.Store.SetTenantReady(ctx, u.ID); err != nil {
@@ -238,7 +233,7 @@ func (s *Server) signup(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	u, err := s.Store.CreateUser(r.Context(), email, string(hash), tiers.Default)
+	u, err := s.Store.CreateUser(r.Context(), email, string(hash))
 	if errors.Is(err, store.ErrEmailTaken) {
 		s.render(w, r, "signup.html", http.StatusUnprocessableEntity, page{Title: "Sign up", Error: "An account with this email exists. Log in instead.", Data: authForm{Email: email}})
 		return

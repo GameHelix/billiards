@@ -3,36 +3,14 @@
   <div>
     <span class="eyebrow">LESS CHECKING. MORE KNOWING.</span>
     <h1>
-      Your agent. In your pocket.
+      The radar. In your pocket.
     </h1>
     <p class="page-description">
-      A direct line to your strategy, wherever the day takes you.
+      Connect a private Telegram chat to your account.
     </p>
   </div>
   <span class="telegram-heading-icon">{{template "icon-telegram"}}</span>
 </div>
-{{if .Data.Setup}}
-<ol class="setup-steps" aria-label="Setup progress">
-  <li class="complete">
-    <span>{{template "icon-check"}}</span>
-    <div>
-      <strong>Connect keys</strong><small>Connected</small>
-    </div>
-  </li>
-  <li class="complete">
-    <span>{{template "icon-check"}}</span>
-    <div>
-      <strong>Create an agent</strong><small>Ready to go</small>
-    </div>
-  </li>
-  <li class="current" aria-current="step">
-    <span>3</span>
-    <div>
-      <strong>Telegram</strong><small>Stay in the loop</small>
-    </div>
-  </li>
-</ol>
-{{end}}
 <div class="form-layout">
   <section class="card telegram-connect">
     <div class="card-heading">
@@ -42,7 +20,7 @@
           Connect Telegram
         </h2>
         <p class="muted">
-          Your next update is just a connection away.
+          Your chat, linked to your account.
         </p>
       </div>
     </div>
@@ -51,11 +29,11 @@
       {{template "icon-info"}} Telegram is not set up on this server.
     </div>
     <p class="muted">
-      You can still see every decision and manage your agents from the dashboard.
+      Every alert still goes to the channel.
     </p>
-    <a class="button quiet" href="/agents">Go to your agents {{template "icon-arrow"}}</a>{{else}}
+    <a class="button quiet" href="https://t.me/candylario">Open the channel {{template "icon-arrow"}}</a>{{else}}
     <p>
-      Your agents' decisions, trades and alerts arrive in a Telegram chat. Keep an eye on your portfolio without keeping a tab open.
+      Connect the chat you will trade from. Next, alerts arrive there with Long, Short and Ignore buttons, once you connect a wallet; until then they go to the free channel.
     </p>
     {{if .Data.Problem}}
     <p class="problem notice" role="alert">
@@ -100,10 +78,10 @@
     <div class="telegram-empty">
       <span class="large-icon blue">{{template "icon-telegram"}}</span>
       <h3>
-        A quieter way to keep up.
+        No chat connected yet.
       </h3>
       <p class="muted">
-        Connect a chat to receive your first update.
+        A link opens the bot in Telegram and connects the chat.
       </p>
     </div>
     {{end}}
@@ -113,35 +91,21 @@
     {{end}}
   </section>
   <aside class="form-aside">
-    <span class="eyebrow">A FEW WORDS GO A LONG WAY</span>
+    <span class="eyebrow">FREE FOR EVERYONE</span>
     <h2>
-      You're a message away.
+      The channel.
     </h2>
     <p>
-      Check in and take action with simple chat commands.
+      Every alert goes to <a href="https://t.me/candylario">t.me/candylario</a> the moment it is raised: what happened, what followed such moves since 2021, and the trade that record argues for. No account needed.
     </p>
     <dl class="command-list">
     <div>
-      <dt><code>/status</code></dt><dd>Your portfolio at a glance</dd>
+      <dt><code>/help</code></dt><dd>What the bot does</dd>
     </div>
     <div>
-      <dt><code>/decide</code></dt><dd>Ask for the next decision</dd>
-    </div>
-    <div>
-      <dt><code>/stop</code></dt><dd>Pause trading</dd>
-    </div>
-    <div>
-      <dt><code>/resume</code></dt><dd>Resume your strategy</dd>
-    </div>
-    <div>
-      <dt><code>/sellall</code></dt><dd>Sell all holdings</dd>
+      <dt><code>/disconnect</code></dt><dd>Stop updates in a chat</dd>
     </div>
     </dl>
   </aside>
 </div>
-{{if .Data.Setup}}
-<div class="setup-finish">
-  <span class="muted">You can connect Telegram anytime.</span><a class="button" href="/agents">Continue to your agents {{template "icon-arrow"}}</a>
-</div>
-{{end}}
 {{end}}

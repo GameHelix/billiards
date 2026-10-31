@@ -6,108 +6,13 @@
       Your account, your way.
     </h1>
     <p class="page-description">
-      Manage your plan, connections, and account security.
+      Your password, your email and your account.
     </p>
   </div>
 </div>
 <nav class="settings-nav" aria-label="Settings sections">
-  <a href="#plan">Your plan</a><a href="#connections">API connections</a><a href="#security">Security</a><a href="#email">Email</a><a href="#account">Delete account</a>
+  <a href="#security">Security</a><a href="#email">Email</a><a href="#account">Delete account</a>
 </nav>
-<section class="card plan-card" id="plan">
-  <span class="icon-tile">{{template "icon-leaf"}}</span>
-  <div>
-    <span class="eyebrow">YOUR CURRENT PLAN</span>
-    <h2>
-      {{.Data.Tier.Title}} <span class="badge neutral">Current tier</span>
-    </h2>
-    <p>
-      {{.Data.Tier.Describe}}
-    </p>
-  </div>
-  <span class="plan-decoration" aria-hidden="true">{{template "icon-spark"}}</span>
-</section>
-<section class="card" id="connections">
-  <div class="card-heading">
-    <div>
-      <h2>
-        API connections
-      </h2>
-      <p class="muted">
-        Your toolkit, securely connected. Only key hints are displayed.
-      </p>
-    </div>
-    <span class="icon-tile">{{template "icon-key"}}</span>
-  </div>
-  {{if or .Data.Anthropic .Data.Binance}}
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th scope="col">
-            Provider
-          </th>
-          <th scope="col">
-            Key
-          </th>
-          <th scope="col">
-            Connected
-          </th>
-          <th scope="col">
-            <span class="sr-only">Actions</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {{range .Data.Anthropic}}
-        <tr>
-          <td>
-            <strong>Anthropic</strong>
-          </td>
-          <td>
-            <code>{{.Hint}}</code>
-          </td>
-          <td class="muted">
-            {{when .CreatedAt}}
-          </td>
-          <td>
-            <form method="post" action="/settings/keys/{{.ID}}/revoke" hx-confirm="Revoke this key? Agents using it stop.">
-              <input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="quiet small">Revoke</button>
-            </form>
-          </td>
-        </tr>
-        {{end}}{{range .Data.Binance}}
-        <tr>
-          <td>
-            <strong>Binance</strong> <span class="badge {{if eq .Mode "testnet"}}test{{else}}live{{end}}">{{.Mode}}</span>
-          </td>
-          <td>
-            <code>{{.Hint}}</code>
-          </td>
-          <td class="muted">
-            {{when .CreatedAt}}
-          </td>
-          <td>
-            <form method="post" action="/settings/keys/{{.ID}}/revoke" hx-confirm="Revoke this key? The agent using it stops.">
-              <input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="quiet small">Revoke</button>
-            </form>
-          </td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
-  </div>
-  {{else}}
-  <div class="soft-note">
-    {{template "icon-key"}} No keys connected yet. Add your first connection below.
-  </div>
-  {{end}}
-  <details class="add-connection">
-    <summary>
-      {{template "icon-plus"}} Add a key <span>Expand</span>
-    </summary>
-    {{template "keys_form" .Data.Form}}
-  </details>
-</section>
 <section class="card" id="security">
   <div class="card-heading">
     <div>
@@ -168,7 +73,7 @@
         Delete your account
       </h2>
       <p class="muted">
-        Your agents stop for good, your keys are erased, your Telegram chats disconnect and you can no longer log in. Your trading history stays only without your name. This cannot be undone.
+        Your Telegram chats disconnect, any wallet key we hold for you is erased and you can no longer log in. This cannot be undone.
       </p>
     </div>
     <span class="icon-tile amber">{{template "icon-info"}}</span>

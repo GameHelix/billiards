@@ -15,10 +15,10 @@
   <div class="card-heading">
     <div>
       <h2>
-        Accounts <span class="count-badge">{{len .Data.Rows}}</span>
+        Accounts <span class="count-badge">{{len .Data}}</span>
       </h2>
       <p class="muted">
-        Account confirmation, tiers, and agent activity.
+        Every account and whether its address is confirmed.
       </p>
     </div>
     <label class="search-field">
@@ -36,18 +36,12 @@
             Address
           </th>
           <th scope="col">
-            Tier
-          </th>
-          <th scope="col">
-            Agents
-          </th>
-          <th scope="col">
             Since
           </th>
         </tr>
       </thead>
       <tbody>
-        {{range .Data.Rows}}
+        {{range .Data}}
         <tr data-search-row>
           <td>
             <strong>{{.User.Email}}</strong>{{if .Admin}}<span class="cell-subtitle">Platform admin</span>{{end}}
@@ -55,27 +49,13 @@
           <td>
             {{if .User.Verified}}<span class="badge running">confirmed</span>{{else}}<span class="badge test">unconfirmed</span>{{end}}{{with .User.EmailProblem}}<span class="cell-subtitle warning">{{.}}</span>{{end}}
           </td>
-          <td>
-            {{if .Admin}}<span class="badge neutral">Admin · no tier</span>{{else}}
-            <form method="post" action="/admin/users/{{.User.ID}}/tier" class="row">
-              <input type="hidden" name="csrf" value="{{$.CSRF}}">{{$tier := .User.Tier}}
-              <label class="sr-only" for="tier-{{.User.ID}}">
-                Tier for {{.User.Email}}
-              </label>
-              <select id="tier-{{.User.ID}}" name="tier">{{range $.Data.Tiers}}<option value="{{.Name}}"{{if eq .Name $tier}} selected{{end}}>{{.Title}}</option>{{end}}</select><button class="quiet small">Set</button>
-            </form>
-            {{end}}
-          </td>
-          <td>
-            {{if .Admin}}<span class="muted">Does not trade</span>{{else if .Problem}}<span class="warning">{{.Problem}}</span>{{else if .User.TenantReady}}{{.Running}} running of {{.Agents}}{{else}}<span class="muted">none yet</span>{{end}}
-          </td>
           <td class="muted nowrap">
             {{when .User.CreatedAt}}
           </td>
         </tr>
         {{else}}
         <tr>
-          <td colspan="5" class="muted">
+          <td colspan="3" class="muted">
             No accounts yet.
           </td>
         </tr>

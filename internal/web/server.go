@@ -1,6 +1,5 @@
-// Package web serves the app: accounts, onboarding and dashboards on the
-// engine API. Users' keys pass through to the engine's vault and are never
-// kept here.
+// Package web serves the app: the public pages, accounts, and connecting a
+// Telegram chat to an account.
 package web
 
 import (
@@ -9,25 +8,21 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"html/template"
 	"io"
 	"io/fs"
 	"net/http"
 	"net/url"
 	"path"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/candylario/trader/api"
 
-	"github.com/candylario/app/internal/engine"
 	"github.com/candylario/app/internal/mail"
 	"github.com/candylario/app/internal/notifier"
 	"github.com/candylario/app/internal/store"
-	"github.com/candylario/app/internal/tiers"
 )
 
 //go:embed templates static
@@ -36,7 +31,6 @@ var files embed.FS
 type Server struct {
 	Store    *store.Store
 	Engine   *api.Client
-	Events   *engine.Events
 	Notifier *notifier.Client // nil when Telegram is not set up
 	BaseURL  string
 	Mail     mail.Sender // nil writes emails to the log
@@ -49,9 +43,6 @@ type Server struct {
 	MailjetWebhookSecret string
 	// Admins are the addresses whose confirmed accounts run the platform.
 	Admins []string
-	// ServerIP is the address exchanges see the engine's calls come from,
-	// for users to allow on their keys.
-	ServerIP string
 
 	once   sync.Once
 	tmpl   map[string]*template.Template
@@ -74,9 +65,6 @@ func (s *Server) init() {
 	}
 	if s.Mail == nil {
 		s.Mail = mail.Log{Logf: s.Logf}
-	}
-	if s.Events == nil {
-		s.Events = &engine.Events{Client: s.Engine}
 	}
 }
 
@@ -108,32 +96,12 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /verify-email", s.requireAccess(s.resendVerification, anyAccount))
 	mux.Handle("POST /verify-email/address", s.requireAccess(s.changeAddress, anyAccount))
 	mux.Handle("GET /admin", s.requireAccess(s.admin, platformAdmin))
-	mux.Handle("POST /admin/users/{id}/tier", s.requireAccess(s.adminSetTier, platformAdmin))
 	mux.Handle("POST /admin/password", s.requireAccess(s.adminChangePassword, platformAdmin))
 	for pattern, h := range map[string]http.HandlerFunc{
-		"GET /setup":                             s.setup,
-		"GET /setup/keys":                        s.keysForm,
-		"POST /setup/keys":                       s.addKeys,
-		"GET /setup/agent":                       s.agentForm,
-		"POST /setup/agent":                      s.createAgent,
-		"GET /agents":                            s.agents,
-		"GET /agents/new":                        s.agentForm,
-		"POST /agents":                           s.createAgent,
-		"GET /agents/{id}":                       s.agent,
-		"GET /agents/{id}/status":                s.agentStatus,
-		"GET /agents/{id}/events":                s.agentEvents,
-		"GET /agents/{id}/chart":                 s.agentChart,
-		"GET /agents/{id}/sellall":               s.sellAllForm,
-		"GET /activity":                          s.activity,
-		"POST /agents/{id}/commands":             s.command,
-		"POST /agents/{id}/start":                s.startAgent,
-		"POST /agents/{id}/stop":                 s.stopAgent,
 		"GET /telegram":                          s.telegram,
 		"POST /telegram/links":                   s.telegramLink,
 		"POST /telegram/chats/{chat}/disconnect": s.telegramDisconnect,
 		"GET /settings":                          s.settings,
-		"POST /settings/keys":                    s.addKeys,
-		"POST /settings/keys/{id}/revoke":        s.revokeKey,
 		"POST /settings/password":                s.changePassword,
 		"POST /settings/email":                   s.changeEmail,
 		"POST /settings/delete":                  s.deleteAccount,
@@ -198,7 +166,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, s.landing(v.User), http.StatusSeeOther)
 		return
 	}
-	s.render(w, r, "home.html", http.StatusOK, page{Title: "Trading agents that work around the clock"})
+	s.render(w, r, "home.html", http.StatusOK, page{Title: "Unusual moves on Hyperliquid, as they happen"})
 }
 
 // secure sets the headers every response carries.
@@ -322,7 +290,7 @@ func userMessage(err error) string {
 	var e *api.Error
 	if errors.As(err, &e) {
 		switch e.Code {
-		case "refused", "not_running", "no_account", "conflict", "bad_request":
+		case "refused", "conflict", "bad_request":
 			return e.Message
 		case "not_found":
 			return "Not found."
@@ -338,35 +306,7 @@ func isCode(err error, code string) bool {
 
 func parseTemplates() map[string]*template.Template {
 	funcs := template.FuncMap{
-		"money": func(s string) string {
-			f, err := strconv.ParseFloat(s, 64)
-			if err != nil {
-				return s
-			}
-			return fmt.Sprintf("%.2f", f)
-		},
-		"usd":    func(f float64) string { return fmt.Sprintf("%.2f", f) },
-		"pct":    func(f float64) string { return fmt.Sprintf("%.0f%%", f*100) },
-		"when":   func(t time.Time) string { return t.UTC().Format("Jan 2, 15:04") + " UTC" },
-		"coin":   tiers.Coin,
-		"rating": func(r string) string { return strings.ReplaceAll(r, "_", " ") },
-		"pretty": func(raw json.RawMessage) string {
-			var buf bytes.Buffer
-			if json.Indent(&buf, raw, "", "  ") != nil {
-				return string(raw)
-			}
-			return buf.String()
-		},
-		"summary": engine.Summary,
-		"interval": func(h float64) string {
-			if h < 1 {
-				return fmt.Sprintf("%.0f minutes", h*60)
-			}
-			if h == 1 {
-				return "1 hour"
-			}
-			return fmt.Sprintf("%g hours", h)
-		},
+		"when": func(t time.Time) string { return t.UTC().Format("Jan 2, 15:04") + " UTC" },
 	}
 	base := template.Must(template.New("").Funcs(funcs).ParseFS(files, "templates/layout.html", "templates/partials/*.html"))
 	pages, err := fs.Glob(files, "templates/pages/*.html")

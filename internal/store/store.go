@@ -1,5 +1,5 @@
 // Package store keeps the app's accounts and sessions in its own Postgres
-// database. Keys and agents live in the engine; the app only remembers
+// database. Wallets and trades live in the engine; the app only remembers
 // which tenant is whose.
 package store
 
@@ -97,7 +97,6 @@ type User struct {
 	PasswordHash    string
 	TenantID        uuid.UUID
 	TenantReady     bool
-	Tier            string
 	CreatedAt       time.Time
 	EmailVerifiedAt *time.Time
 	EmailProblem    string
@@ -106,13 +105,13 @@ type User struct {
 // Verified says whether the account's email address is confirmed.
 func (u User) Verified() bool { return u.EmailVerifiedAt != nil }
 
-const userCols = "id, email, password_hash, tenant_id, tenant_ready, tier, created_at, email_verified_at, email_problem"
+const userCols = "id, email, password_hash, tenant_id, tenant_ready, created_at, email_verified_at, email_problem"
 
 // userColsU is userCols for a query that calls the users table u.
 var userColsU = "u." + strings.ReplaceAll(userCols, ", ", ", u.")
 
 func userFields(u *User) []any {
-	return []any{&u.ID, &u.Email, &u.PasswordHash, &u.TenantID, &u.TenantReady, &u.Tier, &u.CreatedAt, &u.EmailVerifiedAt, &u.EmailProblem}
+	return []any{&u.ID, &u.Email, &u.PasswordHash, &u.TenantID, &u.TenantReady, &u.CreatedAt, &u.EmailVerifiedAt, &u.EmailProblem}
 }
 
 func scanUser(r pgx.Row) (User, error) {
@@ -132,12 +131,12 @@ func newID() uuid.UUID {
 	return id
 }
 
-// CreateUser adds an account on the tier, with a new tenant id the engine
-// has not seen yet.
-func (s *Store) CreateUser(ctx context.Context, email, passwordHash, tier string) (User, error) {
-	u := User{ID: newID(), Email: email, PasswordHash: passwordHash, TenantID: newID(), Tier: tier}
-	err := s.pool.QueryRow(ctx, "insert into users (id, email, password_hash, tenant_id, tier) values ($1, $2, $3, $4, $5) returning created_at",
-		u.ID, u.Email, u.PasswordHash, u.TenantID, u.Tier).Scan(&u.CreatedAt)
+// CreateUser adds an account, with a new tenant id the engine has not seen
+// yet.
+func (s *Store) CreateUser(ctx context.Context, email, passwordHash string) (User, error) {
+	u := User{ID: newID(), Email: email, PasswordHash: passwordHash, TenantID: newID()}
+	err := s.pool.QueryRow(ctx, "insert into users (id, email, password_hash, tenant_id) values ($1, $2, $3, $4) returning created_at",
+		u.ID, u.Email, u.PasswordHash, u.TenantID).Scan(&u.CreatedAt)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		return u, ErrEmailTaken
@@ -163,11 +162,6 @@ func (s *Store) Users(ctx context.Context) ([]User, error) {
 
 func (s *Store) SetTenantReady(ctx context.Context, id uuid.UUID) error {
 	_, err := s.pool.Exec(ctx, "update users set tenant_ready = true where id = $1", id)
-	return err
-}
-
-func (s *Store) SetTier(ctx context.Context, id uuid.UUID, tier string) error {
-	_, err := s.pool.Exec(ctx, "update users set tier = $2 where id = $1", id, tier)
 	return err
 }
 

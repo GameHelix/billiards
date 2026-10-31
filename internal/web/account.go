@@ -98,7 +98,7 @@ func (s *Server) confirmEmailChange(w http.ResponseWriter, r *http.Request) {
 }
 
 // deleteAccount closes the account for good: the engine closes its tenant,
-// so its agents stop and its keys are erased; its Telegram chats disconnect;
+// so any wallet key it holds is erased; its Telegram chats disconnect;
 // and the app forgets the account with its sessions and links. When the
 // engine cannot close the tenant, nothing is deleted.
 func (s *Server) deleteAccount(w http.ResponseWriter, r *http.Request) {

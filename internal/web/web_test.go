@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -67,39 +65,16 @@ func testDatabase(t *testing.T) string {
 	return url
 }
 
-// fakeEngine is the engine API with in-memory tenants, keys, agents and
-// events, as openapi.yaml describes it.
+// fakeEngine is the engine API with in-memory tenants, as openapi.yaml
+// describes it.
 type fakeEngine struct {
-	mu       sync.Mutex
-	token    string
-	tenants  map[string]api.Tenant
-	keys     map[string][]api.Key
-	secrets  map[string]map[string]string
-	agents   map[string][]*api.Agent
-	configs  map[string]json.RawMessage
-	statuses map[string]api.Status
-	events   map[string][]api.Event
-	started  []string
-	commands []api.Command
+	mu      sync.Mutex
+	token   string
+	tenants map[string]api.Tenant
 }
 
 func newFakeEngine() *fakeEngine {
-	return &fakeEngine{token: "engine-token", tenants: map[string]api.Tenant{}, keys: map[string][]api.Key{}, secrets: map[string]map[string]string{},
-		agents: map[string][]*api.Agent{}, configs: map[string]json.RawMessage{}, statuses: map[string]api.Status{}, events: map[string][]api.Event{}}
-}
-
-func (f *fakeEngine) refuse(w http.ResponseWriter, status int, code, msg string) {
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"code": code, "message": msg}})
-}
-
-func (f *fakeEngine) agent(tenant, id string) *api.Agent {
-	for _, a := range f.agents[tenant] {
-		if a.ID == id {
-			return a
-		}
-	}
-	return nil
+	return &fakeEngine{token: "engine-token", tenants: map[string]api.Tenant{}}
 }
 
 func (f *fakeEngine) server(t *testing.T) *httptest.Server {
@@ -108,29 +83,25 @@ func (f *fakeEngine) server(t *testing.T) *httptest.Server {
 		w.WriteHeader(status)
 		json.NewEncoder(w).Encode(v)
 	}
+	notFound := func(w http.ResponseWriter) {
+		reply(w, 404, map[string]any{"error": map[string]string{"code": "not_found", "message": "no such tenant"}})
+	}
 	mux.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) { reply(w, 200, map[string]bool{"ok": true}) })
-	mux.HandleFunc("DELETE /v1/tenants/{t}", func(w http.ResponseWriter, r *http.Request) {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		t, ok := f.tenants[r.PathValue("t")]
-		if !ok {
-			reply(w, 404, map[string]any{"error": map[string]string{"code": "not_found", "message": "no such tenant"}})
-			return
-		}
-		t.Status, t.Name = "closed", ""
-		f.tenants[t.ID] = t
-		reply(w, 200, api.Closed{Stopped: []api.Stopped{}})
-	})
 	mux.HandleFunc("POST /v1/tenants", func(w http.ResponseWriter, r *http.Request) {
 		var in api.NewTenant
-		json.NewDecoder(r.Body).Decode(&in)
+		d := json.NewDecoder(r.Body)
+		d.DisallowUnknownFields()
+		if err := d.Decode(&in); err != nil {
+			reply(w, 400, map[string]any{"error": map[string]string{"code": "bad_request", "message": err.Error()}})
+			return
+		}
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		if t, ok := f.tenants[in.ID]; ok {
 			reply(w, 200, t)
 			return
 		}
-		t := api.Tenant{ID: in.ID, Name: in.Name, Status: "active", Plan: in.Plan}
+		t := api.Tenant{ID: in.ID, Name: in.Name, Status: "active"}
 		f.tenants[in.ID] = t
 		reply(w, 201, t)
 	})
@@ -139,156 +110,31 @@ func (f *fakeEngine) server(t *testing.T) *httptest.Server {
 		defer f.mu.Unlock()
 		t, ok := f.tenants[r.PathValue("t")]
 		if !ok {
-			f.refuse(w, 404, "not_found", "no such tenant")
+			notFound(w)
 			return
 		}
 		reply(w, 200, t)
 	})
-	mux.HandleFunc("PUT /v1/tenants/{t}/plan", func(w http.ResponseWriter, r *http.Request) {
-		var p api.Plan
-		json.NewDecoder(r.Body).Decode(&p)
+	mux.HandleFunc("DELETE /v1/tenants/{t}", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		t := f.tenants[r.PathValue("t")]
-		t.Plan = p
-		f.tenants[r.PathValue("t")] = t
-		reply(w, 200, api.PlanChange{Plan: p, Stopped: []api.Stopped{}})
-	})
-	mux.HandleFunc("POST /v1/tenants/{t}/keys", func(w http.ResponseWriter, r *http.Request) {
-		var in api.NewKey
-		json.NewDecoder(r.Body).Decode(&in)
-		var secret map[string]string
-		json.Unmarshal(in.Secret, &secret)
-		if strings.Contains(secret["key"], "bad") {
-			f.refuse(w, 422, "refused", "the key was not accepted")
-			return
-		}
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		visible := secret["key"]
-		k := api.Key{ID: uuid.NewString(), Kind: in.Kind, Label: in.Label, Hint: "…" + visible[max(0, len(visible)-4):], CreatedAt: time.Now()}
-		f.keys[r.PathValue("t")] = append(f.keys[r.PathValue("t")], k)
-		f.secrets[k.ID] = secret
-		reply(w, 201, k)
-	})
-	mux.HandleFunc("GET /v1/tenants/{t}/keys", func(w http.ResponseWriter, r *http.Request) {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		reply(w, 200, api.KeyList{Keys: append([]api.Key{}, f.keys[r.PathValue("t")]...)})
-	})
-	mux.HandleFunc("DELETE /v1/tenants/{t}/keys/{k}", func(w http.ResponseWriter, r *http.Request) {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		keys := f.keys[r.PathValue("t")]
-		for i := range keys {
-			if keys[i].ID == r.PathValue("k") {
-				keys[i].Revoked = true
-				reply(w, 200, api.Revoked{Stopped: []api.Stopped{{AgentID: "x", Reason: "key revoked"}}})
-				return
-			}
-		}
-		f.refuse(w, 404, "not_found", "no such key")
-	})
-	mux.HandleFunc("POST /v1/tenants/{t}/agents", func(w http.ResponseWriter, r *http.Request) {
-		var in api.NewAgent
-		json.NewDecoder(r.Body).Decode(&in)
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		for _, a := range f.agents[r.PathValue("t")] {
-			if a.Name == in.Name {
-				f.refuse(w, 422, "refused", "an agent with this name exists")
-				return
-			}
-		}
-		a := &api.Agent{ID: uuid.NewString(), Name: in.Name, Mode: in.Mode, Status: "stopped", Version: 1, Keys: map[string]string{}}
-		for _, id := range in.Keys {
-			for _, k := range f.keys[r.PathValue("t")] {
-				if k.ID == id {
-					a.Keys[k.Kind] = id
-				}
-			}
-		}
-		f.agents[r.PathValue("t")] = append(f.agents[r.PathValue("t")], a)
-		f.configs[a.ID] = in.Config
-		reply(w, 201, a)
-	})
-	mux.HandleFunc("GET /v1/tenants/{t}/agents", func(w http.ResponseWriter, r *http.Request) {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		out := api.AgentList{Agents: []api.Agent{}}
-		for _, a := range f.agents[r.PathValue("t")] {
-			out.Agents = append(out.Agents, *a)
-		}
-		reply(w, 200, out)
-	})
-	withAgent := func(fn func(w http.ResponseWriter, r *http.Request, a *api.Agent)) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			f.mu.Lock()
-			defer f.mu.Unlock()
-			a := f.agent(r.PathValue("t"), r.PathValue("a"))
-			if a == nil {
-				f.refuse(w, 404, "not_found", "no such agent")
-				return
-			}
-			fn(w, r, a)
-		}
-	}
-	mux.HandleFunc("GET /v1/tenants/{t}/agents/{a}", withAgent(func(w http.ResponseWriter, r *http.Request, a *api.Agent) { reply(w, 200, a) }))
-	mux.HandleFunc("POST /v1/tenants/{t}/agents/{a}/start", withAgent(func(w http.ResponseWriter, r *http.Request, a *api.Agent) {
-		a.Status, a.Running = "active", true
-		f.started = append(f.started, a.ID)
-		reply(w, 200, a)
-	}))
-	mux.HandleFunc("POST /v1/tenants/{t}/agents/{a}/stop", withAgent(func(w http.ResponseWriter, r *http.Request, a *api.Agent) {
-		a.Status, a.Running = "stopped", false
-		reply(w, 200, a)
-	}))
-	mux.HandleFunc("GET /v1/tenants/{t}/agents/{a}/status", withAgent(func(w http.ResponseWriter, r *http.Request, a *api.Agent) {
-		st, ok := f.statuses[a.ID]
+		t, ok := f.tenants[r.PathValue("t")]
 		if !ok {
-			f.refuse(w, 422, "no_account", "the agent has no account yet")
+			notFound(w)
 			return
 		}
-		reply(w, 200, st)
-	}))
-	mux.HandleFunc("POST /v1/tenants/{t}/agents/{a}/commands", withAgent(func(w http.ResponseWriter, r *http.Request, a *api.Agent) {
-		var c api.Command
-		json.NewDecoder(r.Body).Decode(&c)
-		f.commands = append(f.commands, c)
-		reply(w, 200, api.CommandResult{OK: true, Message: "Done: " + c.Command})
-	}))
-	mux.HandleFunc("GET /v1/tenants/{t}/agents/{a}/events", withAgent(func(w http.ResponseWriter, r *http.Request, a *api.Agent) {
-		q := r.URL.Query()
-		after, _ := strconv.ParseInt(q.Get("after"), 10, 64)
-		before, err := strconv.ParseInt(q.Get("before"), 10, 64)
-		if err != nil {
-			before = math.MaxInt64
-		}
-		limit, _ := strconv.Atoi(q.Get("limit"))
-		types := q.Get("type")
-		out := api.EventList{Events: []api.Event{}}
-		for _, e := range f.events[a.ID] {
-			if e.Seq > after && e.Seq < before && (types == "" || strings.Contains(","+types+",", ","+e.Type+",")) {
-				out.Events = append(out.Events, e)
-			}
-		}
-		if len(out.Events) > limit {
-			if q.Has("before") {
-				out.Events = out.Events[len(out.Events)-limit:]
-			} else {
-				out.Events = out.Events[:limit]
-			}
-		}
-		reply(w, 200, out)
-	}))
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer "+f.token && r.URL.Path != "/v1/health" {
-			f.refuse(w, 401, "unauthorized", "bad token")
+		t.Status, t.Name = "closed", ""
+		f.tenants[t.ID] = t
+		reply(w, 200, t)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+f.token {
+			reply(w, 401, map[string]any{"error": map[string]string{"code": "unauthorized", "message": "bad token"}})
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		mux.ServeHTTP(w, r)
-	}))
+		notFound(w)
+	})
+	return httptest.NewServer(mux)
 }
 
 type fakeNotifier struct {
@@ -454,7 +300,7 @@ func (r *rig) signup(email string) string {
 	next, page := resp.Header.Get("Location"), "/settings"
 	if next == "/admin" {
 		page = "/admin"
-	} else if resp.StatusCode != 303 || next != "/setup" {
+	} else if resp.StatusCode != 303 || next != "/telegram" {
 		r.t.Fatalf("confirm: %d %s %s", resp.StatusCode, next, body)
 	}
 	_, body = r.get(page)
@@ -474,40 +320,24 @@ func (r *rig) tenantOf(email string) string {
 	return u.TenantID.String()
 }
 
-func (r *rig) addKeys(csrf string) {
-	r.t.Helper()
-	resp, body := r.post("/setup/keys", url.Values{"csrf": {csrf}, "anthropic_key": {"sk-ant-good-1234"}, "binance_key": {"bkey-5678"}, "binance_secret": {"bsecret"}, "binance_mode": {"testnet"}})
-	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/setup" {
-		r.t.Fatalf("keys: %d %s", resp.StatusCode, body)
-	}
-}
-
-func (r *rig) createAgent(csrf string) string {
-	r.t.Helper()
-	resp, body := r.post("/setup/agent", url.Values{"csrf": {csrf}, "name": {"btc-eth"}, "symbols": {"BTCUSDT", "ETHUSDT"}, "capital": {"100"}, "interval": {"4"}})
-	if resp.StatusCode != 303 || !strings.HasPrefix(resp.Header.Get("Location"), "/agents/") {
-		r.t.Fatalf("create agent: %d %s %s", resp.StatusCode, resp.Header.Get("Location"), body)
-	}
-	return strings.TrimPrefix(resp.Header.Get("Location"), "/agents/")
-}
-
-func TestSignupCreatesTheTenantOnTrialAndLogsIn(t *testing.T) {
+func TestSignupCreatesTheTenantAndLogsIn(t *testing.T) {
 	r := newRig(t)
 	r.signup("Ada@Example.com")
 	tenant := r.tenantOf("ada@example.com")
 	r.engine.mu.Lock()
 	tn, ok := r.engine.tenants[tenant]
 	r.engine.mu.Unlock()
-	if !ok || tn.Plan.Live || tn.Plan.MaxAgents != 1 || len(tn.Plan.Symbols) != 2 || tn.Name != "ada@example.com" {
+	if !ok || tn.Name != "ada@example.com" || tn.Status != "active" {
 		t.Fatalf("tenant in engine: %+v %v", tn, ok)
 	}
-	resp, _ := r.get("/setup")
-	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/setup/keys" {
-		t.Fatalf("setup without keys: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	resp, body := r.get("/telegram")
+	if resp.StatusCode != 200 || !strings.Contains(body, "Connect a chat") || !strings.Contains(body, `href="/telegram" aria-current="page"`) {
+		t.Fatalf("telegram page: %d", resp.StatusCode)
 	}
-	resp, body := r.get("/agents")
-	if resp.StatusCode != 200 || !strings.Contains(body, "Set up your first agent") {
-		t.Fatalf("agents page: %d", resp.StatusCode)
+	for _, gone := range []string{"/agents", "/activity", "/setup", "/setup/keys"} {
+		if resp, _ := r.get(gone); resp.StatusCode != 404 {
+			t.Fatalf("%s is gone: %d", gone, resp.StatusCode)
+		}
 	}
 	resp, body = r.post("/signup", url.Values{"email": {"ada@example.com"}, "password": {"another password"}})
 	if resp.StatusCode != 422 || !strings.Contains(body, "An account with this email exists") {
@@ -541,7 +371,7 @@ func TestLoginRejectsWrongPasswordsAndTooManyTries(t *testing.T) {
 	}
 	r.srv.logins = newLimiter(10, time.Minute)
 	resp, _ = r.post("/login", url.Values{"email": {"bob@example.com"}, "password": {"correct horse battery"}})
-	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/agents" {
+	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/telegram" {
 		t.Fatalf("right password: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
 	resp, _ = r.post("/login", url.Values{"email": {"bob@example.com"}, "password": {"correct horse battery"}}, "Sec-Fetch-Site", "cross-site")
@@ -561,7 +391,7 @@ func TestChangesNeedTheSessionsToken(t *testing.T) {
 	if resp.StatusCode != 303 {
 		t.Fatalf("with token: %d", resp.StatusCode)
 	}
-	resp, _ = r.get("/agents")
+	resp, _ = r.get("/telegram")
 	if resp.StatusCode != 200 {
 		t.Fatalf("still logged in: %d", resp.StatusCode)
 	}
@@ -574,215 +404,9 @@ func TestChangesNeedTheSessionsToken(t *testing.T) {
 	if resp.StatusCode != 303 {
 		t.Fatalf("new password: %d", resp.StatusCode)
 	}
-	resp, _ = r.get("/agents")
+	resp, _ = r.get("/telegram")
 	if resp.StatusCode != 200 {
 		t.Fatalf("logged in with new password: %d", resp.StatusCode)
-	}
-}
-
-func TestKeysGoStraightToTheEngine(t *testing.T) {
-	r := newRig(t)
-	csrf := r.signup("dee@example.com")
-	resp, body := r.post("/setup/keys", url.Values{"csrf": {csrf}, "anthropic_key": {"sk-ant-bad"}, "binance_key": {"bkey"}, "binance_secret": {"bsec"}, "binance_mode": {"live"}})
-	if resp.StatusCode != 422 || !strings.Contains(body, "the key was not accepted") || !strings.Contains(body, "does not include real-money trading") {
-		t.Fatalf("refused keys: %d %s", resp.StatusCode, body)
-	}
-	r.addKeys(csrf)
-	tenant := r.tenantOf("dee@example.com")
-	r.engine.mu.Lock()
-	keys := r.engine.keys[tenant]
-	var kinds []string
-	for _, k := range keys {
-		kinds = append(kinds, k.Kind+"/"+k.Label)
-	}
-	secret := r.engine.secrets[keys[1].ID]
-	r.engine.mu.Unlock()
-	if strings.Join(kinds, " ") != "anthropic/default binance/testnet" {
-		t.Fatalf("keys stored: %v", kinds)
-	}
-	if secret["key"] != "bkey-5678" || secret["secret"] != "bsecret" {
-		t.Fatalf("binance secret forwarded: %v", secret)
-	}
-	resp, _ = r.get("/setup")
-	if resp.Header.Get("Location") != "/setup/agent" {
-		t.Fatalf("setup with keys: %s", resp.Header.Get("Location"))
-	}
-	_, body = r.get("/settings")
-	if !strings.Contains(body, "…1234") || !strings.Contains(body, "…5678") || strings.Contains(body, "bsecret") {
-		t.Fatalf("settings shows hints only: %s", body)
-	}
-}
-
-func TestCreatingAnAgentBuildsItsConfigAndStartsIt(t *testing.T) {
-	r := newRig(t)
-	csrf := r.signup("eve@example.com")
-	r.addKeys(csrf)
-	resp, body := r.post("/setup/agent", url.Values{"csrf": {csrf}, "name": {"btc-eth"}, "symbols": {"SOLUSDT"}, "capital": {"100"}, "interval": {"4"}})
-	if resp.StatusCode != 422 || !strings.Contains(body, "from your tier") {
-		t.Fatalf("coin outside the tier: %d", resp.StatusCode)
-	}
-	resp, body = r.post("/setup/agent", url.Values{"csrf": {csrf}, "name": {"btc-eth"}, "symbols": {"BTCUSDT"}, "capital": {"100"}, "interval": {"1"}})
-	if resp.StatusCode != 422 || !strings.Contains(body, "interval") {
-		t.Fatalf("interval below the tier: %d", resp.StatusCode)
-	}
-	id := r.createAgent(csrf)
-	tenant := r.tenantOf("eve@example.com")
-	r.engine.mu.Lock()
-	a := r.engine.agent(tenant, id)
-	var cfg map[string]any
-	json.Unmarshal(r.engine.configs[id], &cfg)
-	started := append([]string{}, r.engine.started...)
-	keys := r.engine.keys[tenant]
-	r.engine.mu.Unlock()
-	if a == nil || a.Mode != "testnet" || a.Keys["anthropic"] != keys[0].ID || a.Keys["binance"] != keys[1].ID {
-		t.Fatalf("agent: %+v", a)
-	}
-	if cfg["capital_usd"] != 100.0 || cfg["decision_interval_hours"] != 4.0 || cfg["max_event_decisions_per_day"] != 4.0 || fmt.Sprint(cfg["symbols"]) != "[BTCUSDT ETHUSDT]" || cfg["name"] != "btc-eth" {
-		t.Fatalf("config: %v", cfg)
-	}
-	if len(started) != 1 || started[0] != id {
-		t.Fatalf("started: %v", started)
-	}
-	resp, body = r.get("/agents/" + id)
-	if resp.StatusCode != 200 || !strings.Contains(body, "testnet") || !strings.Contains(body, "Not started yet") {
-		t.Fatalf("agent page before its account exists: %d %s", resp.StatusCode, body)
-	}
-	resp, body = r.post("/setup/agent", url.Values{"csrf": {csrf}, "name": {"btc-eth"}, "symbols": {"BTCUSDT"}, "capital": {"100"}, "interval": {"4"}})
-	if resp.StatusCode != 422 || !strings.Contains(body, "an agent with this name exists") {
-		t.Fatalf("engine refusal shown: %d %s", resp.StatusCode, body)
-	}
-}
-
-func TestAgentPageShowsTheAccountAndTakesCommands(t *testing.T) {
-	r := newRig(t)
-	csrf := r.signup("fay@example.com")
-	r.addKeys(csrf)
-	id := r.createAgent(csrf)
-	tenant := r.tenantOf("fay@example.com")
-	next := time.Now().Add(2 * time.Hour)
-	r.engine.mu.Lock()
-	r.engine.statuses[id] = api.Status{AgentID: id, Name: "btc-eth", Mode: "testnet", Running: true, Trading: api.TradingOn, Capital: "100", Equity: "101.5", BuyAndHold: "100.2",
-		Cash: "55.5", Fees: "0.1", Positions: []api.Position{{Symbol: "BTCUSDT", Coin: "BTC", Qty: "0.0004", Value: "46", Weight: 0.45}},
-		LastDecision: &api.Decision{ID: 3, At: time.Now(), Kind: "scheduled", Summary: "Quiet weekend <b>market</b>", Ratings: map[string]api.Rating{"BTCUSDT": {Rating: "strong_buy", Confidence: "medium", Rationale: "ETF inflows"}}, CostUSD: 0.07},
-		NextDecision: &next, Trades: 2, GradedCalls: 4, RightCalls: 3, AISpend: &api.AISpend{TodayUSD: 0.2, MonthUSD: 1.1, DailyLimitUSD: 5, MonthlyLimitUSD: 100}, At: time.Now(), Message: "ok"}
-	for i := 1; i <= 3; i++ {
-		r.engine.events[id] = append(r.engine.events[id], api.Event{Seq: int64(i), ID: uuid.NewString(), Type: "equity.hourly", At: time.Now().Add(time.Duration(i-3) * time.Hour),
-			Payload: json.RawMessage(fmt.Sprintf(`{"equity":"%d","buy_and_hold":"100"}`, 99+i))})
-	}
-	r.engine.events[id] = append(r.engine.events[id], api.Event{Seq: 4, ID: uuid.NewString(), Type: "notice", At: time.Now(), Payload: json.RawMessage(`{"text":"🧪 Bought BTC <script>"}`)})
-	r.engine.mu.Unlock()
-
-	resp, body := r.get("/agents/" + id)
-	for _, want := range []string{"101.50", "100.20", "strong buy", "ETF inflows", "Quiet weekend &lt;b&gt;market&lt;/b&gt;", "3 of 4 graded calls right", "🧪 Bought BTC &lt;script&gt;", "<svg", "Sell everything"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("agent page lacks %q", want)
-		}
-	}
-	if resp.StatusCode != 200 || strings.Contains(body, "<script>") && !strings.Contains(body, `<script src="/static/htmx.min.js"`) {
-		t.Fatalf("agent page: %d", resp.StatusCode)
-	}
-	for _, p := range []string{"/status", "/events", "/chart"} {
-		if resp, _ := r.get("/agents/" + id + p); resp.StatusCode != 200 {
-			t.Errorf("%s: %d", p, resp.StatusCode)
-		}
-	}
-	resp, body = r.post("/agents/"+id+"/commands", url.Values{"command": {"sell_all"}}, "X-CSRF-Token", csrf)
-	if resp.StatusCode != 400 || !strings.Contains(body, "Confirm") {
-		t.Fatalf("sell all without confirm: %d", resp.StatusCode)
-	}
-	resp, body = r.post("/agents/"+id+"/commands", url.Values{"command": {"sell_all"}, "confirm": {"yes"}}, "X-CSRF-Token", csrf)
-	if resp.StatusCode != 200 || !strings.Contains(body, "Done: sell_all") || !strings.Contains(body, `id="confirm" hx-swap-oob`) {
-		t.Fatalf("sell all confirmed: %d %s", resp.StatusCode, body)
-	}
-	r.post("/agents/"+id+"/commands", url.Values{"command": {"decide"}}, "X-CSRF-Token", csrf)
-	resp, _ = r.post("/agents/"+id+"/commands", url.Values{"command": {"explode"}}, "X-CSRF-Token", csrf)
-	if resp.StatusCode != 400 {
-		t.Fatalf("unknown command: %d", resp.StatusCode)
-	}
-	r.post("/agents/"+id+"/stop", nil, "X-CSRF-Token", csrf)
-	r.engine.mu.Lock()
-	var names []string
-	for _, c := range r.engine.commands {
-		names = append(names, c.Command+"/"+c.Via)
-	}
-	a := r.engine.agent(tenant, id)
-	r.engine.mu.Unlock()
-	if strings.Join(names, " ") != "sell_all/app decide/app" || a.Status != "stopped" {
-		t.Fatalf("engine saw %v, agent %s", names, a.Status)
-	}
-	resp, _ = r.get("/agents/" + uuid.NewString())
-	if resp.StatusCode != 404 {
-		t.Fatalf("someone else's agent: %d", resp.StatusCode)
-	}
-}
-
-func TestActivityLogPagesThroughTheRecordByGroup(t *testing.T) {
-	r := newRig(t)
-	csrf := r.signup("hal@example.com")
-	r.addKeys(csrf)
-	id := r.createAgent(csrf)
-	types := []string{"decision.started", "model.call", "decision.finished", "notice", "trade.booked"}
-	add := func(seq int) {
-		r.engine.mu.Lock()
-		defer r.engine.mu.Unlock()
-		r.engine.events[id] = append(r.engine.events[id], api.Event{Seq: int64(seq), ID: uuid.NewString(), Type: types[seq%len(types)],
-			At: time.Now().Add(time.Duration(seq-200) * time.Minute), Hash: fmt.Sprintf("%064x", seq), Payload: json.RawMessage(fmt.Sprintf(`{"text":"update %d"}`, seq))})
-	}
-	for seq := 1; seq <= 120; seq++ {
-		add(seq)
-	}
-	more := func(path string) (int, string) {
-		t.Helper()
-		req, _ := http.NewRequest(http.MethodGet, r.app.URL+path, nil)
-		req.Header.Set("HX-Request", "true")
-		resp, err := r.client.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer resp.Body.Close()
-		body, _ := io.ReadAll(resp.Body)
-		return resp.StatusCode, string(body)
-	}
-	entry := func(seq int) string { return fmt.Sprintf("Entry %d ·", seq) }
-
-	if _, body := r.get("/agents"); !strings.Contains(body, `href="/activity"`) {
-		t.Fatal("the sidebar leads to the activity log")
-	}
-	resp, body := r.get("/activity")
-	if resp.StatusCode != 200 || !strings.Contains(body, entry(120)) || !strings.Contains(body, entry(71)) || strings.Contains(body, entry(70)) ||
-		!strings.Contains(body, "before=71") || !strings.Contains(body, "after=120") || !strings.Contains(body, `href="/activity" aria-current="page"`) {
-		t.Fatalf("the newest page: %d %s", resp.StatusCode, body)
-	}
-	code, body := more("/activity?agent=" + id + "&before=71")
-	if code != 200 || !strings.Contains(body, entry(70)) || !strings.Contains(body, entry(21)) || strings.Contains(body, entry(20)) ||
-		!strings.Contains(body, "before=21") || strings.Contains(body, "after=") || strings.Contains(body, "<html") {
-		t.Fatalf("older entries: %d %s", code, body)
-	}
-	if code, body = more("/activity?agent=" + id + "&before=21"); code != 200 || !strings.Contains(body, entry(1)) || !strings.Contains(body, "Start of the record") || strings.Contains(body, "before=") {
-		t.Fatalf("the oldest entries: %d %s", code, body)
-	}
-	add(121)
-	if code, body = more("/activity?agent=" + id + "&after=120"); code != 200 || !strings.Contains(body, entry(121)) || !strings.Contains(body, "after=121") || strings.Contains(body, entry(120)) {
-		t.Fatalf("newer entries: %d %s", code, body)
-	}
-	if code, body = more("/activity?agent=" + id + "&after=121"); code != 200 || !strings.Contains(body, "after=121") || strings.Contains(body, "Entry ") {
-		t.Fatalf("nothing newer: %d %s", code, body)
-	}
-	_, body = r.get("/activity?agent=" + id + "&show=trades")
-	if !strings.Contains(body, "Trade booked") || strings.Contains(body, "Model call") || !strings.Contains(body, entry(119)) || strings.Contains(body, entry(120)) ||
-		!strings.Contains(body, entry(4)) || !strings.Contains(body, "Start of the record") {
-		t.Fatalf("only trades: %s", body)
-	}
-	if resp, body = r.get("/activity?agent=" + id + "&before=21"); !strings.Contains(body, entry(121)) || !strings.Contains(body, "<html") {
-		t.Fatalf("a cursor in an address opens the newest page: %d", resp.StatusCode)
-	}
-	if resp, _ = r.get("/activity?agent=" + uuid.NewString()); resp.StatusCode != 404 {
-		t.Fatalf("someone else's agent: %d", resp.StatusCode)
-	}
-	_, body = r.get("/agents/" + id)
-	if !strings.Contains(body, "update 118") || !strings.Contains(body, "update 98") || strings.Contains(body, "update 93") || strings.Contains(body, entry(118)) ||
-		!strings.Contains(body, "/activity?agent="+id) {
-		t.Fatalf("the agent page shows only its latest messages and leads to the log: %s", body)
 	}
 }
 
@@ -822,24 +446,6 @@ func TestTelegramLinksAndChats(t *testing.T) {
 	}
 }
 
-func TestSettingsRevokeAKey(t *testing.T) {
-	r := newRig(t)
-	csrf := r.signup("hal@example.com")
-	r.addKeys(csrf)
-	tenant := r.tenantOf("hal@example.com")
-	r.engine.mu.Lock()
-	key := r.engine.keys[tenant][1].ID
-	r.engine.mu.Unlock()
-	resp, _ := r.post("/settings/keys/"+key+"/revoke", url.Values{"csrf": {csrf}})
-	if resp.StatusCode != 303 {
-		t.Fatalf("revoke: %d", resp.StatusCode)
-	}
-	_, body := r.get("/settings")
-	if !strings.Contains(body, "Key revoked; 1 agent(s) stopped") || strings.Contains(body, "…5678") {
-		t.Fatalf("after revoke: %s", body)
-	}
-}
-
 func TestLogoutEndsTheSession(t *testing.T) {
 	r := newRig(t)
 	csrf := r.signup("ivy@example.com")
@@ -847,11 +453,11 @@ func TestLogoutEndsTheSession(t *testing.T) {
 	if resp.StatusCode != 303 {
 		t.Fatalf("logout: %d", resp.StatusCode)
 	}
-	resp, _ = r.get("/agents")
+	resp, _ = r.get("/telegram")
 	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/login" {
 		t.Fatalf("after logout: %d", resp.StatusCode)
 	}
-	req, _ := http.NewRequest(http.MethodGet, r.app.URL+"/agents/x/status", nil)
+	req, _ := http.NewRequest(http.MethodGet, r.app.URL+"/telegram", nil)
 	req.Header.Set("HX-Request", "true")
 	resp, err := r.client.Do(req)
 	if err != nil {
@@ -887,9 +493,9 @@ func TestSignupNeedsTheEmailConfirmed(t *testing.T) {
 	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/verify-email" {
 		t.Fatalf("signup: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
-	resp, _ = r.get("/agents")
+	resp, _ = r.get("/telegram")
 	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/verify-email" {
-		t.Fatalf("agents before confirming: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+		t.Fatalf("telegram before confirming: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
 	if n := r.tenants(); n != 0 {
 		t.Fatalf("%d engine tenants before confirming", n)
@@ -908,20 +514,20 @@ func TestSignupNeedsTheEmailConfirmed(t *testing.T) {
 	if resp, _ = r.get(first); resp.StatusCode != 410 {
 		t.Fatalf("replaced link: %d", resp.StatusCode)
 	}
-	if resp, _ = r.get(second); resp.StatusCode != 303 || resp.Header.Get("Location") != "/setup" {
+	if resp, _ = r.get(second); resp.StatusCode != 303 || resp.Header.Get("Location") != "/telegram" {
 		t.Fatalf("link: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
-	if resp, _ = r.get(second); resp.StatusCode != 303 || resp.Header.Get("Location") != "/agents" {
+	if resp, _ = r.get(second); resp.StatusCode != 303 || resp.Header.Get("Location") != "/telegram" {
 		t.Fatalf("link again while logged in: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
-	if resp, _ = r.get("/agents"); resp.StatusCode != 200 || r.tenants() != 1 {
-		t.Fatalf("agents after confirming: %d, %d tenants", resp.StatusCode, r.tenants())
+	if resp, _ = r.get("/telegram"); resp.StatusCode != 200 || r.tenants() != 1 {
+		t.Fatalf("telegram after confirming: %d, %d tenants", resp.StatusCode, r.tenants())
 	}
 }
 
 func TestAMistypedAddressCanBeChangedBeforeConfirming(t *testing.T) {
 	r := newRig(t)
-	if _, err := r.srv.Store.CreateUser(context.Background(), "gus@example.com", "x", "trial"); err != nil {
+	if _, err := r.srv.Store.CreateUser(context.Background(), "gus@example.com", "x"); err != nil {
 		t.Fatal(err)
 	}
 	r.post("/signup", url.Values{"email": {"fran@exmaple.com"}, "password": {"correct horse battery"}})
@@ -939,7 +545,7 @@ func TestAMistypedAddressCanBeChangedBeforeConfirming(t *testing.T) {
 	if resp, _ = r.get(typo); resp.StatusCode != 410 {
 		t.Fatalf("link to the old address: %d", resp.StatusCode)
 	}
-	if resp, _ = r.get(r.mail.link(t, "fran@example.com")); resp.StatusCode != 303 || resp.Header.Get("Location") != "/setup" {
+	if resp, _ = r.get(r.mail.link(t, "fran@example.com")); resp.StatusCode != 303 || resp.Header.Get("Location") != "/telegram" {
 		t.Fatalf("link to the new address: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
 }
@@ -970,17 +576,17 @@ func TestForgottenPasswordIsResetByEmail(t *testing.T) {
 		t.Fatalf("short password: %d", resp.StatusCode)
 	}
 	resp, _ = r.post("/reset", url.Values{"token": {token}, "password": {"a brand new password"}, "again": {"a brand new password"}})
-	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/agents" {
+	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/telegram" {
 		t.Fatalf("reset: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
-	if resp, _ = r.get("/agents"); resp.StatusCode != 200 {
+	if resp, _ = r.get("/telegram"); resp.StatusCode != 200 {
 		t.Fatalf("logged in after the reset: %d", resp.StatusCode)
 	}
 	if resp, _ = r.get(link); resp.StatusCode != 410 {
 		t.Fatalf("link used twice: %d", resp.StatusCode)
 	}
 	r.client.Jar = first
-	if resp, _ = r.get("/agents"); resp.StatusCode != 303 || resp.Header.Get("Location") != "/login" {
+	if resp, _ = r.get("/telegram"); resp.StatusCode != 303 || resp.Header.Get("Location") != "/login" {
 		t.Fatalf("other browser still logged in: %d", resp.StatusCode)
 	}
 	if resp, _ = r.post("/login", url.Values{"email": {"hal@example.com"}, "password": {"correct horse battery"}}); resp.StatusCode != 401 {
@@ -1041,41 +647,23 @@ func TestSignupSaysWhenTheEmailCouldNotBeSent(t *testing.T) {
 	}
 }
 
-func TestAdminSeesEveryAccountAndSetsTiers(t *testing.T) {
+func TestAdminSeesEveryAccount(t *testing.T) {
 	r := newRig(t)
 	r.srv.Admins = []string{"boss@example.com"}
 	ctx := context.Background()
-	kim, err := r.srv.Store.CreateUser(ctx, "kim@example.com", "x", "trial")
-	if err != nil {
+	if _, err := r.srv.Store.CreateUser(ctx, "kim@example.com", "x"); err != nil {
 		t.Fatal(err)
 	}
 	r.signup("lee@example.com")
 	jar, _ := cookiejar.New(nil)
 	r.client.Jar = jar
-	csrf := r.signup("boss@example.com")
+	r.signup("boss@example.com")
 	resp, body := r.get("/admin")
 	if resp.StatusCode != 200 || !strings.Contains(body, "kim@example.com") || !strings.Contains(body, "lee@example.com") || !strings.Contains(body, "unconfirmed") || !strings.Contains(body, `href="/admin"`) {
 		t.Fatalf("admin page: %d %s", resp.StatusCode, body)
 	}
-	resp, _ = r.post("/admin/users/"+kim.ID.String()+"/tier", url.Values{"csrf": {csrf}, "tier": {"pro"}})
-	if u, _ := r.srv.Store.UserByEmail(ctx, "kim@example.com"); resp.StatusCode != 303 || u.Tier != "pro" {
-		t.Fatalf("tier of an account without a tenant: %d %s", resp.StatusCode, u.Tier)
-	}
-	lee, _ := r.srv.Store.UserByEmail(ctx, "lee@example.com")
-	r.post("/admin/users/"+lee.ID.String()+"/tier", url.Values{"csrf": {csrf}, "tier": {"standard"}})
-	r.engine.mu.Lock()
-	live := r.engine.tenants[lee.TenantID.String()].Plan.Live
-	r.engine.mu.Unlock()
-	if u, _ := r.srv.Store.UserByEmail(ctx, "lee@example.com"); u.Tier != "standard" || !live {
-		t.Fatalf("tier with a tenant: %s, engine plan live %v", u.Tier, live)
-	}
-	boss, _ := r.srv.Store.UserByEmail(ctx, "boss@example.com")
-	r.post("/admin/users/"+boss.ID.String()+"/tier", url.Values{"csrf": {csrf}, "tier": {"pro"}})
-	if u, _ := r.srv.Store.UserByEmail(ctx, "boss@example.com"); u.Tier != "trial" {
-		t.Fatalf("an admin got a tier: %s", u.Tier)
-	}
-	if resp, _ = r.post("/admin/users/"+lee.ID.String()+"/tier", url.Values{"csrf": {csrf}, "tier": {"gold"}}); resp.StatusCode != 404 {
-		t.Fatalf("unknown tier: %d", resp.StatusCode)
+	if strings.Contains(body, "/tier") {
+		t.Fatal("tiers are gone")
 	}
 }
 
@@ -1086,7 +674,7 @@ func TestAdminIsNotAPlatformUser(t *testing.T) {
 	if n := r.tenants(); n != 0 {
 		t.Fatalf("the admin got %d engine tenants", n)
 	}
-	for _, p := range []string{"/", "/agents", "/activity", "/setup", "/setup/keys", "/telegram", "/settings"} {
+	for _, p := range []string{"/", "/telegram", "/settings"} {
 		if resp, _ := r.get(p); resp.StatusCode != 303 || resp.Header.Get("Location") != "/admin" {
 			t.Fatalf("%s for the admin: %d %s", p, resp.StatusCode, resp.Header.Get("Location"))
 		}
@@ -1121,9 +709,8 @@ func TestOnlyConfirmedAdminsSeeTheAdminPage(t *testing.T) {
 	if resp.StatusCode != 404 || strings.Contains(body, `href="/admin"`) {
 		t.Fatalf("admin page for a user: %d", resp.StatusCode)
 	}
-	lee, _ := r.srv.Store.UserByEmail(context.Background(), "lee@example.com")
-	if resp, _ = r.post("/admin/users/"+lee.ID.String()+"/tier", url.Values{"csrf": {csrf}, "tier": {"pro"}}); resp.StatusCode != 404 {
-		t.Fatalf("tier change by a user: %d", resp.StatusCode)
+	if resp, _ = r.post("/admin/password", url.Values{"csrf": {csrf}, "current": {"correct horse battery"}, "password": {"a brand new password"}, "again": {"a brand new password"}}); resp.StatusCode != 404 {
+		t.Fatalf("an admin route for a user: %d", resp.StatusCode)
 	}
 	jar, _ := cookiejar.New(nil)
 	r.client.Jar = jar
@@ -1133,31 +720,11 @@ func TestOnlyConfirmedAdminsSeeTheAdminPage(t *testing.T) {
 	}
 }
 
-func TestKeyFormsSayHowToGetEachKey(t *testing.T) {
-	r := newRig(t)
-	r.srv.ServerIP = "203.0.113.7"
-	r.signup("max@example.com")
-	_, body := r.get("/setup/keys")
-	for _, want := range []string{"https://platform.claude.com/settings/keys", "https://testnet.binance.vision", "Log In with GitHub"} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("setup page lacks %q", want)
-		}
-	}
-	if strings.Contains(body, "real-money key") {
-		t.Fatal("trial accounts see how to get a real-money key")
-	}
-	u, _ := r.srv.Store.UserByEmail(context.Background(), "max@example.com")
-	r.srv.Store.SetTier(context.Background(), u.ID, "standard")
-	if _, body = r.get("/settings"); !strings.Contains(body, "real-money key") || !strings.Contains(body, "<code>203.0.113.7</code>, this platform's address") {
-		t.Fatal("settings lack the real-money steps with the server's address")
-	}
-}
-
 func TestChangingTheEmailNeedsTheNewAddressConfirmed(t *testing.T) {
 	r := newRig(t)
 	r.srv.Admins = []string{"boss@example.com"}
 	ctx := context.Background()
-	if _, err := r.srv.Store.CreateUser(ctx, "taken@example.com", "x", "trial"); err != nil {
+	if _, err := r.srv.Store.CreateUser(ctx, "taken@example.com", "x"); err != nil {
 		t.Fatal(err)
 	}
 	csrf := r.signup("pat@example.com")
@@ -1233,7 +800,7 @@ func TestDeletingTheAccountClosesItEverywhere(t *testing.T) {
 	if _, err := r.srv.Store.UserByEmail(ctx, "oli@example.com"); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("the account is still there: %v", err)
 	}
-	if resp, _ := r.get("/agents"); resp.StatusCode != 303 || resp.Header.Get("Location") != "/login" {
+	if resp, _ := r.get("/telegram"); resp.StatusCode != 303 || resp.Header.Get("Location") != "/login" {
 		t.Fatalf("still logged in: %d", resp.StatusCode)
 	}
 	if resp, _ := r.post("/login", url.Values{"email": {"oli@example.com"}, "password": {"correct horse battery"}}); resp.StatusCode != 401 {
@@ -1258,7 +825,7 @@ func TestHealthCoversTheEngineAndTheNotifier(t *testing.T) {
 
 func TestLegalPagesAreLinkedFromEveryPublicPage(t *testing.T) {
 	r := newRig(t)
-	for path, want := range map[string]string{"/terms": "Ismat Samadov", "/privacy": "Hetzner Online", "/risk": "30% loss", "/refunds": "within 14 days"} {
+	for path, want := range map[string]string{"/terms": "Ismat Samadov", "/privacy": "Hetzner Online", "/risk": "can be liquidated", "/refunds": "no subscriptions"} {
 		if resp, body := r.get(path); resp.StatusCode != 200 || !strings.Contains(body, want) {
 			t.Fatalf("%s: %d, want %q", path, resp.StatusCode, want)
 		}

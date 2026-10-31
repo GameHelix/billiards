@@ -127,6 +127,10 @@ p.wrap { white-space: pre-wrap; }
 .demo-holdings strong, .demo-holdings small { display: block; font-size: 11px; line-height: 1.5; }
 .demo-holdings small { font-size: 11px; color: #657361; }
 .holding-weight { font-size: 11px; margin-left: auto; }
+.demo-alert { display: grid; gap: 7px; margin: 18px 0 4px; font-size: 12px; line-height: 1.45; color: #4f5d4c; }
+.demo-alert strong { font-size: 14px; font-weight: 600; letter-spacing: -.2px; color: #1d2b22; }
+.demo-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 16px; }
+.demo-buttons span { padding: 8px 6px; border: 1px solid #e4eade; border-radius: 7px; background: #fcfdf9; text-align: center; font-size: 11px; font-weight: 550; color: #4f5d4c; }
 .demo-footnote { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 15px; font-size: 11px; color: #929f8c; }
 .demo-footnote .status-dot { width: 4px; height: 4px; }
 .demo-footnote > span:last-child { margin-left: auto; color: #a2aa9c; }

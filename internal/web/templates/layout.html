@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#102c2b">
-<meta name="description" content="Your market, on autopilot. Thoughtful AI trading agents for Binance, with clear decisions, fixed risk limits, and updates on Telegram. Start with test funds.">
+<meta name="description" content="A radar over Hyperliquid perpetuals: unusual moves as they happen, on Telegram, each with the record of what followed such moves since 2021 and the trade that record argues for.">
 <title>{{.Title}} · Candylario</title>
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
@@ -36,17 +36,14 @@
     <nav class="app-nav" aria-label="Platform">
       <a href="/admin"{{if eq .Section "admin"}} aria-current="page"{{end}}>{{template "icon-shield"}}<span>Accounts</span></a>
     </nav>
-    <div class="sidebar-note"><span class="icon-tile">{{template "icon-shield"}}</span><strong>Your platform workspace.</strong><p>Manage accounts and tiers from one clear overview.</p><a href="/admin#admin-security">Account security {{template "icon-arrow"}}</a></div>
+    <div class="sidebar-note"><span class="icon-tile">{{template "icon-shield"}}</span><strong>Your platform workspace.</strong><p>Every account in one clear overview.</p><a href="/admin#admin-security">Account security {{template "icon-arrow"}}</a></div>
     {{else}}
     <p class="nav-label">WORKSPACE</p>
     <nav class="app-nav" aria-label="Workspace">
-      <a href="/agents"{{if and (eq .Section "agents") (ne .View "agent_form")}} aria-current="page"{{end}}>{{template "icon-grid"}}<span>Overview</span></a>
-      <a href="/activity"{{if eq .Section "activity"}} aria-current="page"{{end}}>{{template "icon-activity"}}<span>Activity</span></a>
-      <a href="/agents/new"{{if eq .View "agent_form"}} aria-current="page"{{end}}>{{template "icon-plus"}}<span>Create agent</span></a>
       <a href="/telegram"{{if eq .Section "telegram"}} aria-current="page"{{end}}>{{template "icon-telegram"}}<span>Telegram</span></a>
       <a href="/settings"{{if eq .Section "settings"}} aria-current="page"{{end}}>{{template "icon-settings"}}<span>Settings</span></a>
     </nav>
-    <div class="sidebar-note"><span class="icon-tile">{{template "icon-leaf"}}</span><strong>Start small. Learn more.</strong><p>Explore your strategy with Binance test funds.</p><a href="/agents/new">Set up an agent {{template "icon-arrow"}}</a></div>
+    <div class="sidebar-note"><span class="icon-tile">{{template "icon-leaf"}}</span><strong>Every alert, free.</strong><p>The radar posts each one to the channel as it happens.</p><a href="https://t.me/candylario">Open the channel {{template "icon-arrow"}}</a></div>
     {{end}}
     <div class="sidebar-bottom"><span class="status-dot"></span> A calmer market day.</div>
   </aside>
@@ -59,7 +56,7 @@
 {{template "content" .}}
 </main>
 {{if .Workspace}}</div>{{end}}
-{{if not .Workspace}}<footer class="site-footer"><div><a class="brand" href="/"><img src="/static/brand.svg" width="26" height="26" alt=""><span>candylario<span class="brand-dot">.</span></span></a><span>Thoughtful trading. Your control.</span></div><nav class="footer-links" aria-label="Legal"><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/risk">Risk notice</a><a href="/refunds">Refunds</a></nav><p>Crypto trading involves risk. Start with test funds.</p><span>© 2026 Candylario</span></footer>{{end}}
+{{if not .Workspace}}<footer class="site-footer"><div><a class="brand" href="/"><img src="/static/brand.svg" width="26" height="26" alt=""><span>candylario<span class="brand-dot">.</span></span></a><span>Thoughtful trading. Your control.</span></div><nav class="footer-links" aria-label="Legal"><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/risk">Risk notice</a><a href="/refunds">Refunds</a></nav><p>Crypto trading involves risk. The record is history, not a promise.</p><span>© 2026 Candylario</span></footer>{{end}}
 <div id="request-notice" class="request-notice" role="alert" hidden></div>
 </body>
 </html>{{end}}
